@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Geo-Tools – Raphael Fisch</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #f4f1eb;
+      --surface:   #fffefb;
+      --ink:       #1a1810;
+      --ink-2:     #6b6555;
+      --red:       #c0392b;
+      --red-light: #f9ece9;
+      --grid:      rgba(26,24,16,0.07);
+      --border:    rgba(26,24,16,0.12);
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--ink);
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 300;
+      min-height: 100dvh;
+      overflow-x: hidden;
+    }
+
+    /* ── Topographic grid background ── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        repeating-linear-gradient(0deg,   transparent, transparent 39px, var(--grid) 39px, var(--grid) 40px),
+        repeating-linear-gradient(90deg,  transparent, transparent 39px, var(--grid) 39px, var(--grid) 40px);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── Header ── */
+    header {
+      position: relative;
+      z-index: 1;
+      padding: 3.5rem 2rem 2.5rem;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    header h1 {
+      font-family: 'DM Serif Display', serif;
+      font-size: clamp(2.2rem, 6vw, 4rem);
+      line-height: 1.05;
+      letter-spacing: -0.02em;
+    }
+
+    header h1 em {
+      font-style: italic;
+      color: var(--red);
+    }
+
+    .header-sub {
+      margin-top: 0.4rem;
+      font-size: 0.9rem;
+      color: var(--ink-2);
+      line-height: 1.6;
+    }
+
+    /* ── Main grid ── */
+    main {
+      position: relative;
+      z-index: 1;
+      padding: 2.5rem 2rem 4rem;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    .section-label {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.65rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--ink-2);
+      margin-bottom: 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .section-label::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    .tools-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 1.5px;
+    }
+
+    /* ── Tool card ── */
+    .tool-card {
+      position: relative;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 2rem;
+      text-decoration: none;
+      color: inherit;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      transition: background 0.15s, transform 0.15s;
+      overflow: hidden;
+    }
+
+    .tool-card::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 3px;
+      background: var(--red);
+      transform: scaleY(0);
+      transform-origin: bottom;
+      transition: transform 0.2s ease;
+    }
+
+    .tool-card:hover {
+      background: #fffdf8;
+      transform: translateY(-2px);
+    }
+
+    .tool-card:hover::before {
+      transform: scaleY(1);
+    }
+
+    .tool-number {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.65rem;
+      color: var(--ink-2);
+      letter-spacing: 0.1em;
+    }
+
+    .tool-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--red-light);
+      margin-bottom: 0.25rem;
+    }
+
+    .tool-icon svg {
+      width: 22px;
+      height: 22px;
+      stroke: var(--red);
+      fill: none;
+      stroke-width: 1.5;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .tool-name {
+      font-family: 'DM Serif Display', serif;
+      font-size: 1.35rem;
+      line-height: 1.1;
+      letter-spacing: -0.01em;
+    }
+
+    .tool-desc {
+      font-size: 0.85rem;
+      color: var(--ink-2);
+      line-height: 1.65;
+      flex: 1;
+    }
+
+    .tool-link {
+      margin-top: 0.5rem;
+      font-family: 'DM Mono', monospace;
+      font-size: 0.7rem;
+      color: var(--red);
+      letter-spacing: 0.05em;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      opacity: 0;
+      transform: translateX(-4px);
+      transition: opacity 0.15s, transform 0.15s;
+    }
+
+    .tool-card:hover .tool-link {
+      opacity: 1;
+      transform: translateX(0);
+    }
+
+    .tool-link svg {
+      width: 12px; height: 12px;
+      stroke: var(--red);
+      fill: none;
+      stroke-width: 2;
+    }
+
+    /* ── Footer ── */
+    footer {
+      position: relative;
+      z-index: 1;
+      border-top: 1px solid var(--border);
+      padding: 1.5rem 2rem;
+      background: var(--surface);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
+
+    footer p {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.65rem;
+      color: var(--ink-2);
+      letter-spacing: 0.08em;
+    }
+
+    footer a {
+      color: var(--red);
+      text-decoration: none;
+    }
+
+    footer a:hover { text-decoration: underline; }
+
+    /* ── Mobile ── */
+    @media (max-width: 600px) {
+      header { padding: 2.5rem 1.25rem 2rem; }
+      main { padding: 2rem 1.25rem 3rem; }
+      .tools-grid { grid-template-columns: 1fr; }
+      .tool-card { padding: 1.5rem; }
+      .tool-link { opacity: 1; transform: none; }
+      footer { padding: 1.25rem; }
+    }
+
+    /* ── Entrance animation ── */
+    .tool-card {
+      opacity: 0;
+      animation: rise 0.5s ease forwards;
+    }
+    .tool-card:nth-child(1) { animation-delay: 0.05s; }
+    .tool-card:nth-child(2) { animation-delay: 0.12s; }
+    .tool-card:nth-child(3) { animation-delay: 0.19s; }
+    .tool-card:nth-child(4) { animation-delay: 0.26s; }
+    .tool-card:nth-child(5) { animation-delay: 0.33s; }
+
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(14px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Geo-<em>Tools</em></h1>
+  <p class="header-sub">Interaktive Schweizer Geodaten-Tools für den Unterricht – gebaut mit Swisstopo-APIs, Leaflet und reinem HTML.</p>
+</header>
+
+<main>
+  <div class="tools-grid">
+
+    <!-- 01 Blockbild -->
+    <a class="tool-card" href="https://raphaelfisch.github.io/maps/blockbild.html">
+      <div class="tool-icon">
+        <svg viewBox="0 0 24 24"><path d="M2 20l10-8 10 8"/><path d="M2 14l10-8 10 8"/><rect x="6" y="14" width="12" height="6"/></svg>
+      </div>
+      <span class="tool-name">Blockbild-Explorer</span>
+      <span class="tool-desc">3D-Geländemodell aus swisstopo-Höhendaten. Beliebige Region auswählen, als Blockdiagramm rendern — mit optionaler Satelliten- oder Kartenüberlagerung.</span>
+      <span class="tool-link">
+        <svg viewBox="0 0 12 12"><path d="M1 6h10M6 1l5 5-5 5"/></svg>
+        blockbild.html
+      </span>
+    </a>
+
+    <!-- 02 Flug -->
+    <a class="tool-card" href="https://raphaelfisch.github.io/maps/flug.html">
+      <div class="tool-icon">
+        <svg viewBox="0 0 24 24"><path d="M22 16.5l-9-5.5V3a2 2 0 0 0-4 0v8L0 16.5l1 2 8-3v4l-2 1.5V22l4-1 4 1v-1.5L13 19v-4l8 3 1-2z"/></svg>
+      </div>
+      <span class="tool-name">Flug-Visualisierung</span>
+      <span class="tool-desc">Flugrouten über der Schweiz interaktiv erkunden. Flugbahnen im 3D-Raum visualisiert auf Basis realer Geodaten.</span>
+      <span class="tool-link">
+        <svg viewBox="0 0 12 12"><path d="M1 6h10M6 1l5 5-5 5"/></svg>
+        flug.html
+      </span>
+    </a>
+
+    <!-- 03 Routen-Zeichner -->
+    <a class="tool-card" href="https://raphaelfisch.github.io/maps/routen-zeichner.html">
+      <div class="tool-icon">
+        <svg viewBox="0 0 24 24"><path d="M3 17l4-8 4 4 4-6 4 4"/><circle cx="3" cy="17" r="1.5"/><circle cx="21" cy="11" r="1.5"/></svg>
+      </div>
+      <span class="tool-name">Routen-Zeichner</span>
+      <span class="tool-desc">Wanderrouten und Wege manuell auf der swisstopo-Karte einzeichnen. Strecken exportieren und für den Unterricht verwenden.</span>
+      <span class="tool-link">
+        <svg viewBox="0 0 12 12"><path d="M1 6h10M6 1l5 5-5 5"/></svg>
+        routen-zeichner.html
+      </span>
+    </a>
+
+    <!-- 04 Zeitreise Side-by-Side -->
+    <a class="tool-card" href="https://raphaelfisch.github.io/maps/zeitreise-side-by-side.html">
+      <div class="tool-icon">
+        <svg viewBox="0 0 24 24"><rect x="2" y="4" width="9" height="16" rx="1"/><rect x="13" y="4" width="9" height="16" rx="1"/><path d="M11 12h2"/></svg>
+      </div>
+      <span class="tool-name">Zeitreise Side-by-Side</span>
+      <span class="tool-desc">Historische und aktuelle Karten der Schweiz nebeneinander vergleichen — Siegfriedkarte, Dufourkarte und moderne Aufnahmen synchron.</span>
+      <span class="tool-link">
+        <svg viewBox="0 0 12 12"><path d="M1 6h10M6 1l5 5-5 5"/></svg>
+        zeitreise-side-by-side.html
+      </span>
+    </a>
+
+    <!-- 05 Zeitreise -->
+    <a class="tool-card" href="https://raphaelfisch.github.io/maps/zeitreise.html">
+      <div class="tool-icon">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/><path d="M7.5 3.5C9 2.5 10.5 2 12 2"/></svg>
+      </div>
+      <span class="tool-name">Zeitreise</span>
+      <span class="tool-desc">Die Schweiz durch die Zeit erkunden. Historische Kartenebenen per Schieberegler überblenden und Landschaftsveränderungen nachvollziehen.</span>
+      <span class="tool-link">
+        <svg viewBox="0 0 12 12"><path d="M1 6h10M6 1l5 5-5 5"/></svg>
+        zeitreise.html
+      </span>
+    </a>
+
+  </div>
+</main>
+
+<footer>
+  <p>© 2025 Raphael Fisch</p>
+  <p><a href="https://github.com/raphaelfisch/maps" target="_blank" rel="noopener">github.com/raphaelfisch/maps</a></p>
+</footer>
+
+</body>
+</html>
