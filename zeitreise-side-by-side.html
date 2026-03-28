@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Zeitreise – Kartenvergleich Side-by-Side</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,500;0,9..40,700;1,9..40,400&display=swap');
+
+  :root {
+    --bg: #0f0f0f;
+    --surface: #1a1a1a;
+    --surface-2: #252525;
+    --border: #333;
+    --text: #e8e4df;
+    --text-muted: #888;
+    --accent: #c9a84c;
+    --accent-dim: rgba(201,168,76,0.15);
+    --left-color: #5b9bd5;
+    --right-color: #e07b54;
+    --radius: 10px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Sans', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Header ── */
+  header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 10px 20px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    z-index: 1000;
+  }
+
+  .logo {
+    width: 38px; height: 38px;
+    background: linear-gradient(135deg, var(--accent), #a07830);
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+
+  header h1 {
+    font-size: 1.05rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--text);
+  }
+
+  header .sub {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+
+  .header-right {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .sync-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 14px;
+    border-radius: 20px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    background: var(--accent-dim);
+    color: var(--accent);
+    border: 1px solid rgba(201,168,76,0.3);
+  }
+
+  .sync-badge .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .btn-location {
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    background: var(--surface-2);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .btn-location:hover {
+    background: var(--border);
+    color: var(--text);
+  }
+
+  /* ── Main Layout ── */
+  .main-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .maps-wrapper {
+    flex: 1;
+    display: flex;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .map-panel {
+    flex: 1;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .map-panel:first-child {
+    border-right: 2px solid var(--bg);
+  }
+
+  /* ── Panel Header (Layer Selector) ── */
+  .panel-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    z-index: 500;
+  }
+
+  .panel-label {
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    flex-shrink: 0;
+  }
+
+  .panel-label.left { color: var(--left-color); }
+  .panel-label.right { color: var(--right-color); }
+
+  .panel-indicator {
+    width: 3px;
+    height: 20px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+
+  .panel-indicator.left { background: var(--left-color); }
+  .panel-indicator.right { background: var(--right-color); }
+
+  .layer-select {
+    flex: 1;
+    padding: 5px 10px;
+    border-radius: 6px;
+    background: var(--surface-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    font-family: inherit;
+    font-size: 0.78rem;
+    font-weight: 500;
+    cursor: pointer;
+    outline: none;
+    transition: border-color 0.2s;
+    -webkit-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5L6 7.5L9 4.5' stroke='%23888' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 28px;
+  }
+
+  .layer-select:focus {
+    border-color: var(--accent);
+  }
+
+  .layer-select option {
+    background: var(--surface);
+    color: var(--text);
+  }
+
+  /* ── Map Container ── */
+  .map-container {
+    flex: 1;
+    position: relative;
+  }
+
+  .map-container .leaflet-container {
+    width: 100%;
+    height: 100%;
+    background: #111;
+  }
+
+  /* ── Crosshair ── */
+  .crosshair {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    z-index: 500;
+    opacity: 0.4;
+  }
+
+  .crosshair::before, .crosshair::after {
+    content: '';
+    position: absolute;
+    background: var(--text);
+  }
+
+  .crosshair::before {
+    width: 1px; height: 20px;
+    top: -10px; left: 0;
+  }
+
+  .crosshair::after {
+    width: 20px; height: 1px;
+    top: 0; left: -10px;
+  }
+
+  /* ── Divider Label ── */
+  .divider-line {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 2px;
+    height: 100%;
+    background: var(--bg);
+    z-index: 600;
+    pointer-events: none;
+  }
+
+  .divider-label {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 700;
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .divider-icon {
+    width: 30px; height: 30px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  /* ── Bottom Bar ── */
+  .bottom-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+    padding: 8px 20px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    flex-shrink: 0;
+    z-index: 1000;
+  }
+
+  .coord-info {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .zoom-info {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-weight: 600;
+  }
+
+  .quick-locations {
+    display: flex;
+    gap: 6px;
+  }
+
+  .quick-loc {
+    padding: 4px 12px;
+    border-radius: 14px;
+    font-size: 0.68rem;
+    font-weight: 600;
+    background: var(--surface-2);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+
+  .quick-loc:hover {
+    background: var(--accent-dim);
+    color: var(--accent);
+    border-color: rgba(201,168,76,0.3);
+  }
+
+  /* ── Leaflet Overrides ── */
+  .leaflet-control-zoom {
+    border: 1px solid var(--border) !important;
+    border-radius: 8px !important;
+    overflow: hidden;
+  }
+
+  .leaflet-control-zoom a {
+    background: var(--surface) !important;
+    color: var(--text) !important;
+    border-color: var(--border) !important;
+    width: 32px !important;
+    height: 32px !important;
+    line-height: 32px !important;
+    font-size: 16px !important;
+  }
+
+  .leaflet-control-zoom a:hover {
+    background: var(--surface-2) !important;
+  }
+
+  .leaflet-control-attribution {
+    background: rgba(15,15,15,0.7) !important;
+    color: var(--text-muted) !important;
+    font-size: 9px !important;
+    padding: 2px 6px !important;
+  }
+
+  .leaflet-control-attribution a {
+    color: var(--accent) !important;
+  }
+
+  /* ── Mobile ── */
+  @media (max-width: 700px) {
+    .maps-wrapper {
+      flex-direction: column;
+    }
+
+    .map-panel:first-child {
+      border-right: none;
+      border-bottom: 2px solid var(--bg);
+    }
+
+    .divider-line {
+      top: 50%;
+      left: 0;
+      width: 100%;
+      height: 2px;
+      transform: translateY(-50%);
+    }
+
+    .divider-label {
+      flex-direction: row;
+    }
+
+    .quick-locations {
+      display: none;
+    }
+
+    .bottom-bar {
+      gap: 12px;
+      padding: 6px 12px;
+    }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">🗺️</div>
+  <div>
+    <h1>Zeitreise – Kartenvergleich</h1>
+    <div class="sub">Historische Karten der Schweiz · synchronisiert</div>
+  </div>
+  <div class="header-right">
+    <div class="sync-badge">
+      <span class="dot"></span>
+      Synchron
+    </div>
+  </div>
+</header>
+
+<div class="main-container">
+  <div class="maps-wrapper" id="mapsWrapper">
+    <!-- Left Panel -->
+    <div class="map-panel">
+      <div class="panel-header">
+        <div class="panel-indicator left"></div>
+        <span class="panel-label left">Links</span>
+        <select class="layer-select" id="selectLeft">
+          <!-- populated by JS -->
+        </select>
+      </div>
+      <div class="map-container">
+        <div id="mapLeft" style="width:100%;height:100%;"></div>
+        <div class="crosshair"></div>
+      </div>
+    </div>
+
+    <!-- Right Panel -->
+    <div class="map-panel">
+      <div class="panel-header">
+        <div class="panel-indicator right"></div>
+        <span class="panel-label right">Rechts</span>
+        <select class="layer-select" id="selectRight">
+          <!-- populated by JS -->
+        </select>
+      </div>
+      <div class="map-container">
+        <div id="mapRight" style="width:100%;height:100%;"></div>
+        <div class="crosshair"></div>
+      </div>
+    </div>
+
+    <!-- Divider -->
+    <div class="divider-line"></div>
+  </div>
+
+  <div class="bottom-bar">
+    <span class="coord-info" id="coordInfo">47.2494° N, 9.3432° E</span>
+    <span class="zoom-info" id="zoomInfo">Zoom 14</span>
+    <div class="quick-locations">
+      <button class="quick-loc" onclick="goTo(47.4245, 9.3767, 14)">St. Gallen</button>
+      <button class="quick-loc" onclick="goTo(47.3769, 8.5417, 14)">Zürich</button>
+      <button class="quick-loc" onclick="goTo(46.9480, 7.4474, 14)">Bern</button>
+      <button class="quick-loc" onclick="goTo(46.2044, 6.1432, 14)">Genf</button>
+      <button class="quick-loc" onclick="goTo(47.5596, 7.5886, 14)">Basel</button>
+      <button class="quick-loc" onclick="goTo(46.0037, 8.9511, 14)">Lugano</button>
+      <button class="quick-loc" onclick="goTo(46.8182, 8.2275, 9)">Ganze Schweiz</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════
+//  LAYER DEFINITIONS – Swisstopo WMTS
+// ══════════════════════════════════════════════════
+
+const LAYERS = [
+  {
+    id: 'swisstopo-color',
+    name: '🗺️ Landeskarte (aktuell, farbig)',
+    url: 'https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.pixelkarte-farbe/default/current/3857/{z}/{x}/{y}.jpeg',
+    attribution: '© swisstopo',
+    maxZoom: 19,
+  },
+  {
+    id: 'swisstopo-grey',
+    name: '🗺️ Landeskarte (aktuell, grau)',
+    url: 'https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.pixelkarte-grau/default/current/3857/{z}/{x}/{y}.jpeg',
+    attribution: '© swisstopo',
+    maxZoom: 19,
+  },
+  {
+    id: 'swissimage',
+    name: '📷 Luftbild (aktuell)',
+    url: 'https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.swissimage/default/current/3857/{z}/{x}/{y}.jpeg',
+    attribution: '© swisstopo',
+    maxZoom: 20,
+  },
+
+  {
+    id: 'siegfried',
+    name: '📜 Siegfriedkarte (1870–1926)',
+    url: 'https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.hiks-siegfried/default/current/3857/{z}/{x}/{y}.png',
+    attribution: '© swisstopo',
+    maxZoom: 18,
+  },
+  {
+    id: 'dufour',
+    name: '📜 Dufourkarte (1844–1864)',
+    url: 'https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.hiks-dufour/default/current/3857/{z}/{x}/{y}.png',
+    attribution: '© swisstopo',
+    maxZoom: 17,
+  },
+  {
+    id: 'swissimage-1946',
+    name: '📷 SWISSIMAGE HIST 1946',
+    url: 'https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.swissimage-product_1946/default/1946/3857/{z}/{x}/{y}.jpeg',
+    attribution: '© swisstopo',
+    maxZoom: 19,
+  },
+  {
+    id: 'osm',
+    name: '🌍 OpenStreetMap',
+    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: '© OpenStreetMap',
+    maxZoom: 19,
+  },
+];
+
+// ══════════════════════════════════════════════════
+//  POPULATE SELECTORS
+// ══════════════════════════════════════════════════
+
+const selectLeft = document.getElementById('selectLeft');
+const selectRight = document.getElementById('selectRight');
+
+LAYERS.forEach((layer, i) => {
+  const optL = document.createElement('option');
+  optL.value = layer.id;
+  optL.textContent = layer.name;
+  selectLeft.appendChild(optL);
+
+  const optR = document.createElement('option');
+  optR.value = layer.id;
+  optR.textContent = layer.name;
+  selectRight.appendChild(optR);
+});
+
+// Defaults: left = current Landeskarte, right = Siegfriedkarte
+selectLeft.value = 'siegfried';
+selectRight.value = 'swissimage';
+
+// ══════════════════════════════════════════════════
+//  INIT MAPS
+// ══════════════════════════════════════════════════
+
+const DEFAULT_CENTER = [47.2494, 9.3432];
+const DEFAULT_ZOOM = 14;
+
+const mapLeft = L.map('mapLeft', {
+  center: DEFAULT_CENTER,
+  zoom: DEFAULT_ZOOM,
+  zoomControl: true,
+  attributionControl: true,
+});
+
+const mapRight = L.map('mapRight', {
+  center: DEFAULT_CENTER,
+  zoom: DEFAULT_ZOOM,
+  zoomControl: false,
+  attributionControl: true,
+});
+
+let tileLayerLeft = null;
+let tileLayerRight = null;
+
+function getLayerById(id) {
+  return LAYERS.find(l => l.id === id);
+}
+
+function setTileLayer(map, layerId, side) {
+  const layerDef = getLayerById(layerId);
+  if (!layerDef) return;
+
+  const tileLayer = L.tileLayer(layerDef.url, {
+    attribution: layerDef.attribution,
+    maxZoom: layerDef.maxZoom,
+    maxNativeZoom: layerDef.maxZoom,
+  });
+
+  if (side === 'left') {
+    if (tileLayerLeft) mapLeft.removeLayer(tileLayerLeft);
+    tileLayerLeft = tileLayer;
+    tileLayer.addTo(mapLeft);
+  } else {
+    if (tileLayerRight) mapRight.removeLayer(tileLayerRight);
+    tileLayerRight = tileLayer;
+    tileLayer.addTo(mapRight);
+  }
+}
+
+// Initial layers
+setTileLayer(mapLeft, selectLeft.value, 'left');
+setTileLayer(mapRight, selectRight.value, 'right');
+
+// Layer change handlers
+selectLeft.addEventListener('change', () => {
+  setTileLayer(mapLeft, selectLeft.value, 'left');
+});
+
+selectRight.addEventListener('change', () => {
+  setTileLayer(mapRight, selectRight.value, 'right');
+});
+
+// ══════════════════════════════════════════════════
+//  SYNCHRONIZED PAN & ZOOM
+// ══════════════════════════════════════════════════
+
+let syncing = false;
+
+function syncMap(source, target) {
+  if (syncing) return;
+  syncing = true;
+  target.setView(source.getCenter(), source.getZoom(), { animate: false });
+  syncing = false;
+  updateInfo();
+}
+
+mapLeft.on('move', () => syncMap(mapLeft, mapRight));
+mapLeft.on('zoom', () => syncMap(mapLeft, mapRight));
+mapRight.on('move', () => syncMap(mapRight, mapLeft));
+mapRight.on('zoom', () => syncMap(mapRight, mapLeft));
+
+// ══════════════════════════════════════════════════
+//  INFO UPDATES
+// ══════════════════════════════════════════════════
+
+const coordInfo = document.getElementById('coordInfo');
+const zoomInfo = document.getElementById('zoomInfo');
+
+function updateInfo() {
+  const center = mapLeft.getCenter();
+  const zoom = mapLeft.getZoom();
+  coordInfo.textContent = `${center.lat.toFixed(4)}° N, ${center.lng.toFixed(4)}° E`;
+  zoomInfo.textContent = `Zoom ${zoom}`;
+}
+
+mapLeft.on('moveend', updateInfo);
+mapLeft.on('zoomend', updateInfo);
+
+// Mouse coordinate tracking
+mapLeft.on('mousemove', (e) => {
+  coordInfo.textContent = `${e.latlng.lat.toFixed(5)}° N, ${e.latlng.lng.toFixed(5)}° E`;
+});
+mapRight.on('mousemove', (e) => {
+  coordInfo.textContent = `${e.latlng.lat.toFixed(5)}° N, ${e.latlng.lng.toFixed(5)}° E`;
+});
+
+// ══════════════════════════════════════════════════
+//  QUICK LOCATIONS
+// ══════════════════════════════════════════════════
+
+function goTo(lat, lng, zoom) {
+  mapLeft.setView([lat, lng], zoom, { animate: true });
+}
+
+// ══════════════════════════════════════════════════
+//  KEYBOARD SHORTCUTS
+// ══════════════════════════════════════════════════
+
+document.addEventListener('keydown', (e) => {
+  // + / - for zoom
+  if (e.key === '+' || e.key === '=') {
+    mapLeft.zoomIn();
+  } else if (e.key === '-') {
+    mapLeft.zoomOut();
+  }
+  // 1-9 for quick layer swap
+  if (e.key >= '1' && e.key <= '9') {
+    const idx = parseInt(e.key) - 1;
+    if (idx < LAYERS.length) {
+      if (e.shiftKey) {
+        selectRight.value = LAYERS[idx].id;
+        setTileLayer(mapRight, LAYERS[idx].id, 'right');
+      } else {
+        selectLeft.value = LAYERS[idx].id;
+        setTileLayer(mapLeft, LAYERS[idx].id, 'left');
+      }
+    }
+  }
+});
+
+// Initial info
+updateInfo();
+</script>
+</body>
+</html>

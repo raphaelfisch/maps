@@ -1,0 +1,1227 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<title>Schweizer Blockbild</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Mono:wght@400;500&display=swap');
+:root {
+  --bg:#0d1117; --surface:#161b22; --border:#30363d;
+  --text:#e6edf3; --muted:#8b949e;
+  --accent:#3fb950; --accent2:#58a6ff; --panel:#21262d;
+  --safe-b:env(safe-area-inset-bottom,0px);
+  --safe-t:env(safe-area-inset-top,0px);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+html{height:100%;}
+body{height:100dvh;overflow:hidden;font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);display:flex;flex-direction:column;}
+
+/* Header */
+#hdr{flex-shrink:0;height:48px;padding:0 14px;padding-top:var(--safe-t);background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;z-index:100;}
+#hdr h1{font-family:'DM Serif Display',serif;font-size:1.05rem;white-space:nowrap;}
+.badge{font-size:.58rem;background:var(--accent);color:#000;padding:2px 7px;border-radius:20px;font-weight:500;}
+.badge.b2{background:var(--accent2);}
+#hdr-loc{flex:1;font-size:.7rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right;}
+
+/* Search */
+#srch{flex-shrink:0;padding:8px 12px;background:var(--panel);border-bottom:1px solid var(--border);display:flex;gap:7px;align-items:center;}
+#srch-wrap{flex:1;position:relative;}
+#srch input{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:8px 32px 8px 11px;border-radius:8px;font-family:'DM Mono',monospace;font-size:.82rem;outline:none;box-sizing:border-box;}
+#srch input:focus{border-color:var(--accent2);}
+#srch-clear{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);font-size:1rem;cursor:pointer;padding:2px 4px;line-height:1;display:none;}
+#srch-clear.show{display:block;}
+#srch-drop{position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow-y:auto;max-height:280px;z-index:9999;display:none;box-shadow:0 8px 24px rgba(0,0,0,.5);}
+#srch-drop.open{display:block;}
+.srch-item{padding:9px 12px;font-size:.78rem;cursor:pointer;color:var(--text);border-bottom:1px solid var(--border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.srch-item:last-child{border-bottom:none;}
+.srch-item:hover,.srch-item.active{background:var(--panel);color:var(--accent2);}
+.srch-item em{color:var(--muted);font-style:normal;font-size:.68rem;margin-left:6px;}
+.btn{background:var(--accent);color:#000;border:none;padding:8px 14px;border-radius:8px;font-family:'DM Mono',monospace;font-size:.78rem;font-weight:500;cursor:pointer;white-space:nowrap;-webkit-appearance:none;}
+.btn:active{opacity:.75;} .btn:disabled{opacity:.35;}
+/* Controls locked during load */
+body.loading #srch-input,body.loading #srch-btn,
+body.loading #sel-tex,body.loading #sel-size,
+body.loading #sel-grid,body.loading #sel-exag,
+body.loading #ctrl-right{pointer-events:none;opacity:.4;}
+body.loading .tab{pointer-events:none;}
+.btn.sec{background:var(--surface);color:var(--muted);border:1px solid var(--border);}
+
+/* Content */
+#content{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;}
+.panel{display:none;flex-direction:column;overflow:hidden;}
+.panel.active{display:flex;flex:1;min-height:0;}
+
+/* Map */
+#panel-map{position:relative;}
+#map{flex:1;min-height:0;width:100%;height:100%;}
+.map-hint{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);background:rgba(13,17,23,.9);border:1px solid var(--border);border-radius:20px;padding:7px 16px;font-size:.68rem;color:var(--muted);pointer-events:none;white-space:nowrap;z-index:500;}
+#map-badge{position:absolute;top:12px;left:50%;transform:translateX(-50%);background:rgba(63,185,80,.92);color:#000;border-radius:20px;padding:6px 14px;font-size:.72rem;font-weight:500;z-index:500;display:none;white-space:nowrap;box-shadow:0 2px 12px rgba(0,0,0,.4);}
+
+/* Block panel */
+#panel-block{background:#080c10;position:relative;}
+#blockCanvas{flex:1;min-height:0;display:block;width:100%;touch-action:none;}
+
+/* Bottom Sheet */
+#bottom-sheet{
+  position:absolute;bottom:0;left:0;right:0;z-index:50;
+  transition:transform .3s cubic-bezier(.32,0,.67,0);
+  transform:translateY(calc(100% - 22px));
+  touch-action:none;
+}
+#bottom-sheet.open{transform:translateY(0);}
+#sheet-handle{
+  height:22px;display:flex;align-items:center;justify-content:center;
+  cursor:pointer;
+}
+#sheet-handle::before{
+  content:'';width:36px;height:4px;background:var(--border);
+  border-radius:2px;transition:background .15s;
+}
+#bottom-sheet.open #sheet-handle::before{background:var(--accent2);}
+#sheet-body{
+  background:rgba(22,27,34,.97);border-top:1px solid var(--border);
+  padding:10px 14px 16px;display:flex;flex-direction:column;gap:8px;
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+}
+.param-row{display:flex;align-items:center;justify-content:space-between;gap:10px;}
+.param-lbl{font-size:.72rem;color:var(--muted);white-space:nowrap;min-width:88px;}
+.param-row select{
+  flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);
+  padding:7px 8px;border-radius:8px;font-family:'DM Mono',monospace;
+  font-size:.75rem;outline:none;
+}
+.param-row select:focus{border-color:var(--accent2);}
+
+/* Desktop: keep as top overlay */
+@media(min-width:760px){
+  #bottom-sheet{
+    top:10px;left:auto;right:10px;bottom:auto;width:220px;
+    transform:none!important;border-radius:10px;overflow:hidden;
+  }
+  #sheet-handle{display:none;}
+  #sheet-body{border-top:none;border:1px solid var(--border);border-radius:10px;padding:10px 12px;}
+}
+
+/* Side buttons */
+#ctrl-right{position:absolute;right:10px;bottom:30px;display:flex;flex-direction:column;gap:8px;z-index:51;}
+.icon-btn{width:44px;height:44px;background:rgba(22,27,34,.93);border:1px solid var(--border);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.15rem;cursor:pointer;transition:all .15s;user-select:none;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);color:var(--text);}
+.icon-btn:active{background:var(--panel);transform:scale(.95);}
+.icon-btn.lit{border-color:var(--accent);color:var(--accent);}
+#compass-needle{font-size:1.4rem;transition:transform .4s cubic-bezier(.34,1.56,.64,1);}
+
+/* Loading */
+#loading{position:absolute;inset:0;background:rgba(8,12,16,.95);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;z-index:200;transition:opacity .3s;}
+#loading.hidden{opacity:0;pointer-events:none;}
+#loading h2{font-family:'DM Serif Display',serif;font-size:1.05rem;opacity:.9;}
+#load-msg{font-size:.72rem;color:var(--muted);text-align:center;max-width:260px;line-height:1.5;}
+.prog-track{width:200px;height:3px;background:var(--border);border-radius:3px;overflow:hidden;}
+.prog-fill{height:100%;background:var(--accent);border-radius:3px;transition:width .15s;width:0;}
+#prog-pct{font-size:.66rem;color:var(--accent);}
+
+/* Tabs */
+#tabs{flex-shrink:0;height:calc(56px + var(--safe-b));padding-bottom:var(--safe-b);background:var(--surface);border-top:1px solid var(--border);display:flex;z-index:100;}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;color:var(--muted);position:relative;}
+.tab-icon{font-size:1.4rem;line-height:1;}
+.tab-lbl{font-size:.6rem;}
+.tab.active{color:var(--accent2);}
+.tab.active::after{content:'';position:absolute;top:0;left:25%;right:25%;height:2px;background:var(--accent2);border-radius:0 0 2px 2px;}
+.tab-dot{position:absolute;top:8px;right:calc(50% - 14px);width:8px;height:8px;border-radius:50%;background:var(--accent);border:2px solid var(--surface);display:none;}
+.tab-dot.show{display:block;}
+
+
+
+/* Desktop */
+@media(min-width:760px){
+  #content{flex-direction:row;}
+  .panel{display:flex!important;flex:1;}
+  #panel-map{flex:0 0 40%;border-right:2px solid var(--accent2);}
+  #panel-block{flex:1;}
+  #tabs{display:none;}
+  #bottom-sheet{
+    top:10px;left:auto;right:10px;bottom:auto;width:230px;
+    transform:none!important;
+  }
+  #sheet-handle{display:none;}
+  #sheet-body{
+    border-top:none;border:1px solid var(--border);
+    border-radius:10px;padding:10px 12px;
+  }
+}
+.leaflet-container{background:#1a2030;}
+.leaflet-tile{filter:brightness(.82) saturate(.88);}
+.leaflet-control-zoom a{background:var(--surface)!important;color:var(--text)!important;border-color:var(--border)!important;}
+</style>
+</head>
+<body>
+
+<div id="hdr">
+  <h1>🏔 Blockbild</h1>
+  <div id="hdr-loc">Ort auf Karte wählen</div>
+</div>
+
+<div id="srch">
+  <div id="srch-wrap">
+    <input type="text" id="srch-input" placeholder="Ort suchen… z.B. Weinfelden, Matterhorn" autocomplete="off"/>
+    <button id="srch-clear" onclick="clearSearch()" tabindex="-1">✕</button>
+    <div id="srch-drop"></div>
+  </div>
+  <button class="btn" id="srch-btn" onclick="doSearch()">🔍</button>
+</div>
+
+<div id="content">
+  <div class="panel active" id="panel-map">
+    <div id="map"></div>
+    <div class="map-hint">📍 Antippen = Blockbild laden</div>
+    <div id="map-badge"></div>
+  </div>
+
+  <div class="panel" id="panel-block">
+    <canvas id="blockCanvas"></canvas>
+
+    <div id="bottom-sheet">
+      <div id="sheet-handle" onclick="toggleSheet()"></div>
+      <div id="sheet-body">
+        <div class="param-row">
+          <label class="param-lbl">Darstellung</label>
+          <select id="sel-tex" onchange="setTex(this.value)">
+            <option value="sat" selected>Luftbild</option>
+            <option value="map">Karte</option>
+            <option value="elev">Höhenfarben</option>
+          </select>
+        </div>
+        <div class="param-row">
+          <label class="param-lbl">Ausschnitt</label>
+          <select id="sel-size" onchange="onParamChange()">
+            <option value="1500">1.5 km</option>
+            <option value="2500" selected>2.5 km</option>
+            <option value="4000">4 km</option>
+            <option value="6000">6 km</option>
+          </select>
+        </div>
+        <div class="param-row">
+          <label class="param-lbl">Auflösung</label>
+          <select id="sel-grid" onchange="onParamChange()">
+            <option value="30" selected>Grob</option>
+            <option value="50">Mittel</option>
+            <option value="70">Fein</option>
+            <option value="90">Sehr fein</option>
+          </select>
+        </div>
+        <div class="param-row">
+          <label class="param-lbl">Überhöhung</label>
+          <select id="sel-exag" onchange="redraw()">
+            <option value="1">1×</option>
+            <option value="1.5" selected>1.5×</option>
+            <option value="2">2×</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div id="ctrl-right">
+      <div class="icon-btn" id="north-btn" onclick="resetView()" title="Ansicht zurücksetzen">⌂</div>
+      <div class="icon-btn" onclick="adjZoom(1.25)" title="Zoom +">＋</div>
+      <div class="icon-btn" onclick="adjZoom(0.8)" title="Zoom −">－</div>
+    </div>
+
+    <div id="loading">
+      <h2 id="load-title">Lade Gelände…</h2>
+      <div id="load-msg">Wähle einen Ort auf der Karte</div>
+      <div class="prog-track">
+        <div class="prog-fill" id="prog-fill"></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div id="prog-pct">0%</div>
+        <button id="load-cancel-btn" onclick="cancelLoad()" style="display:none;background:var(--surface);color:var(--muted);border:1px solid var(--border);padding:4px 12px;border-radius:6px;font-family:'DM Mono',monospace;font-size:.7rem;cursor:pointer;">✕ Abbrechen</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="tabs">
+  <div class="tab active" id="tab-map" onclick="switchTab('map')">
+    <div class="tab-icon">🗺</div><div class="tab-lbl">Karte</div>
+    <div class="tab-dot" id="tab-dot"></div>
+  </div>
+  <div class="tab" id="tab-block" onclick="switchTab('block')">
+    <div class="tab-icon">🏔</div><div class="tab-lbl">Blockbild</div>
+  </div>
+</div>
+
+
+
+<script>
+// ─── Load Leaflet then init ───────────────────────────────────────────────────
+(function(){
+  var s=document.createElement('script');
+  s.src='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';
+  s.onload=init; s.onerror=function(){
+    var s2=document.createElement('script');
+    s2.src='https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    s2.onload=init; document.head.appendChild(s2);
+  };
+  document.head.appendChild(s);
+})();
+
+// Global stubs for onclick= handlers
+function switchTab(t){window._st&&window._st(t);}
+function toggleSheet(){window._ts&&window._ts();}
+function clearSearch(){window._cs&&window._cs();}
+function doSearch(){window._ds&&window._ds();}
+function setTex(m){window._stex&&window._stex(m);}
+function onParamChange(){window._opc&&window._opc();}
+function cancelLoad(){window._cancelLoad&&window._cancelLoad();}
+function adjZoom(f,x,y){window._az&&window._az(f,x,y);}
+function resetView(){window._rv&&window._rv();}
+function redraw(){window._redraw&&window._redraw();}
+
+function init(){
+'use strict';
+
+// ─── Leaflet ──────────────────────────────────────────────────────────────────
+const leafMap=L.map('map',{center:[46.8,8.2],zoom:8,zoomControl:false,attributionControl:false});
+L.control.zoom({position:'bottomright'}).addTo(leafMap);
+L.tileLayer('https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.pixelkarte-farbe/default/current/3857/{z}/{x}/{y}.jpeg',{maxZoom:18}).addTo(leafMap);
+
+let marker=null;
+leafMap.on('click',e=>{
+  const{lat,lng}=e.latlng;
+  pick(lng,lat,`${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E`);
+});
+
+function pick(lon,lat,name){
+  if(marker)leafMap.removeLayer(marker);
+  marker=L.circleMarker([lat,lon],{radius:10,color:'#3fb950',weight:2.5,fillColor:'#3fb950',fillOpacity:.3}).addTo(leafMap);
+  const b=document.getElementById('map-badge');
+  b.textContent=`📍 ${name}`; b.style.display='block';
+  document.getElementById('tab-dot').classList.add('show');
+  document.getElementById('hdr-loc').textContent=name;
+  loadTerrain(lon,lat,name).then(()=>_st('block'));
+}
+
+// ─── Tabs ─────────────────────────────────────────────────────────────────────
+let activeTab='map';
+window._st=function(tab){
+  activeTab=tab;
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById(`panel-${tab}`).classList.add('active');
+  document.getElementById(`tab-${tab}`)?.classList.add('active');
+  document.getElementById('srch').style.display=(tab==='map')?'':'none';
+  if(tab==='block') setTimeout(()=>{if(hGrid)redraw();},60);
+  if(tab==='map') setTimeout(()=>leafMap.invalidateSize(),60);
+};
+
+// ─── State ────────────────────────────────────────────────────────────────────
+const canvas=document.getElementById('blockCanvas');
+const ctx=canvas.getContext('2d');
+
+let hGrid=null,hCols=0,hRows=0;  // height grid (upsampled)
+let texCanvas=null;               // offscreen WMTS texture
+let texBounds=null;               // {lonMin,lonMax,latMax,latMin}
+let texMode='sat';
+let shades=null;                  // per-quad shading Float32Array
+
+let curLon=0,curLat=0,curName='',curSize=2500,curGrid=70;
+let rotX=52,rotZ=-28,zoom=1,panX=0,panY=0;
+let dragging=false,lastMX=0,lastMY=0;
+let touchMode=null,touch1={x:0,y:0},touch2={x:0,y:0},pinchDist=null,pinchCx=0,pinchCy=0;
+
+const PRESETS={
+  weinfelden:{lon:8.8954,lat:47.5601,name:'Weinfelden'},
+  matterhorn:{lon:7.6580,lat:45.9765,name:'Matterhorn'},
+  thunersee: {lon:7.7000,lat:46.7000,name:'Thunersee'},
+  interlaken:{lon:7.8632,lat:46.6863,name:'Interlaken'},
+  zürich:    {lon:8.5417,lat:47.3769,name:'Zürich'},
+};
+
+// (Preset buttons removed)
+
+// ─── Coordinates ──────────────────────────────────────────────────────────────
+function wgsToLV(lon,lat){
+  const phi=(lat*3600-169028.66)/1e4, lam=(lon*3600-26782.5)/1e4;
+  return{
+    E:2600072.37+211455.93*lam-10938.51*lam*phi-.36*lam*phi*phi-44.54*lam*lam*lam,
+    N:1200147.07+308807.95*phi+3745.25*lam*lam+76.63*phi*phi-194.56*lam*lam*phi+119.79*phi*phi*phi
+  };
+}
+function lvToWgs(E,N){
+  const y=(E-2600000)/1e6, x=(N-1200000)/1e6;
+  return{
+    lon:(2.6779094+4.728982*y+.791484*y*x+.1306*y*x*x-.0436*y*y*y)*100/36,
+    lat:(16.9023892+3.238272*x-.270978*y*y-.002528*x*x-.0447*y*y*x-.0140*x*x*x)*100/36
+  };
+}
+function wgsToTile(lon,lat,z){
+  const n=2**z, lr=lat*Math.PI/180;
+  return{x:Math.floor((lon+180)/360*n),
+         y:Math.floor((1-Math.log(Math.tan(lr)+1/Math.cos(lr))/Math.PI)/2*n)};
+}
+function tileToLon(tx,z){return tx/2**z*360-180;}
+function tileToLat(ty,z){const n=Math.PI-2*Math.PI*ty/2**z;return 180/Math.PI*Math.atan(.5*(Math.exp(n)-Math.exp(-n)));}
+
+// ─── WMTS texture ─────────────────────────────────────────────────────────────
+const LAYERS={sat:'ch.swisstopo.swissimage',map:'ch.swisstopo.pixelkarte-farbe'};
+
+async function loadTex(lon,lat,sizeM,mode,zOverride){
+  texCanvas=null; texBounds=null;
+  if(mode==='elev') return;
+  prog(.87,'Lade Kartenkacheln…');
+  const layer=LAYERS[mode];
+  const c=wgsToLV(lon,lat), half=sizeM/2;
+  const sw=lvToWgs(c.E-half,c.N-half);
+  const ne=lvToWgs(c.E+half,c.N+half);
+  // Base zoom level by area size; zOverride allows dynamic adjustment
+  const zBase=sizeM>5000?14:sizeM>3000?15:sizeM>1800?16:17;
+  const z=zOverride??zBase;
+  const tNE=wgsToTile(ne.lon,ne.lat,z), tSW=wgsToTile(sw.lon,sw.lat,z);
+  const txMin=Math.min(tNE.x,tSW.x), txMax=Math.max(tNE.x,tSW.x);
+  const tyMin=Math.min(tNE.y,tSW.y), tyMax=Math.max(tNE.y,tSW.y);
+  const PX=256, W=(txMax-txMin+1)*PX, H=(tyMax-tyMin+1)*PX;
+  const off=Object.assign(document.createElement('canvas'),{width:W,height:H});
+  const oc=off.getContext('2d');
+  oc.fillStyle='#1a2030'; oc.fillRect(0,0,W,H);
+  await Promise.all(Array.from({length:(txMax-txMin+1)*(tyMax-tyMin+1)},(_,i)=>{
+    const tx=txMin+Math.floor(i/(tyMax-tyMin+1));
+    const ty=tyMin+(i%(tyMax-tyMin+1));
+    const url=`https://wmts.geo.admin.ch/1.0.0/${layer}/default/current/3857/${z}/${tx}/${ty}.jpeg`;
+    return new Promise(res=>{
+      const img=new Image(); img.crossOrigin='anonymous';
+      img.onload=()=>{oc.drawImage(img,(tx-txMin)*PX,(ty-tyMin)*PX);res();}
+      img.onerror=()=>res(); img.src=url;
+    });
+  }));
+  // Bounds: tyMin=north (small tile-y), tyMax+1=south
+  texBounds={
+    lonMin:tileToLon(txMin,z), lonMax:tileToLon(txMax+1,z),
+    latMax:tileToLat(tyMin,z), latMin:tileToLat(tyMax+1,z),
+    w:W, h:H, tileZ:z
+  };
+  texCanvas=off;
+}
+
+// ─── Elevation fetch ──────────────────────────────────────────────────────────
+async function fetchH(lon,lat,sizeM,cols,rows,loadId){
+  const c=wgsToLV(lon,lat), half=sizeM/2, stepY=sizeM/(rows-1);
+  const grid=new Float32Array(cols*rows);
+  const BATCH=15; let done=0;
+  for(let bs=0;bs<rows;bs+=BATCH){
+    // Abort early if a newer load started
+    if(loadId!==undefined&&loadId!==_loadId) throw new Error('cancelled');
+    const be=Math.min(bs+BATCH,rows);
+    const ps=[];
+    for(let r=bs;r<be;r++){
+      // r=0 = NORTH, r=max = SOUTH
+      const N=c.N+half-r*stepY, E0=c.E-half, E1=c.E+half;
+      const geom=encodeURIComponent(JSON.stringify({type:'LineString',coordinates:[[E0,N],[E1,N]]}));
+      ps.push(fetch(`https://api3.geo.admin.ch/rest/services/profile.json?geom=${geom}&sr=2056&nb_points=${cols}&distinct_points=true`)
+        .then(x=>x.ok?x.json():null).then(d=>({r,d})).catch(()=>({r,d:null})));
+    }
+    const res=await Promise.all(ps);
+    for(const{r,d}of res){
+      if(!d)continue;
+      for(let c2=0;c2<Math.min(cols,d.length);c2++){
+        const p=d[c2]; grid[r*cols+c2]=p?.alts?.DTM2??p?.alts?.DTM25??500;
+      }
+    }
+    done+=be-bs;
+    prog(done/rows*.84,`Höhendaten: ${done}/${rows} Zeilen…`);
+  }
+  return grid;
+}
+
+// Bicubic upsample
+function cubH(a,b,c,d,t){const t2=t*t,t3=t2*t;return(-.5*a+1.5*b-1.5*c+.5*d)*t3+(a-2.5*b+2*c-.5*d)*t2+(-.5*a+.5*c)*t+b;}
+function clamp(g,C,R,c,r){return g[Math.max(0,Math.min(R-1,Math.round(r)))*C+Math.max(0,Math.min(C-1,Math.round(c)))];}
+function bicubic(g,C,R,fc,fr){
+  const c0=Math.floor(fc),r0=Math.floor(fr),tc=fc-c0,tr=fr-r0;
+  const rs=[-1,0,1,2].map(dr=>{const vs=[-1,0,1,2].map(dc=>clamp(g,C,R,c0+dc,r0+dr));return cubH(vs[0],vs[1],vs[2],vs[3],tc);});
+  return cubH(rs[0],rs[1],rs[2],rs[3],tr);
+}
+function upsample(raw,rC,rR,tC,tR){
+  const out=new Float32Array(tC*tR);
+  for(let r=0;r<tR;r++)for(let c=0;c<tC;c++)
+    out[r*tC+c]=bicubic(raw,rC,rR,c/(tC-1)*(rC-1),r/(tR-1)*(rR-1));
+  return out;
+}
+
+// ─── Shading ──────────────────────────────────────────────────────────────────
+function norm3([x,y,z]){const l=Math.sqrt(x*x+y*y+z*z)||1;return[x/l,y/l,z/l];}
+function dot3([ax,ay,az],[bx,by,bz]){return ax*bx+ay*by+az*bz;}
+function computeShades(g,cols,rows,hRange,hScale,scale){
+  const sun=norm3([.5,-.85,1.3]);
+  const xs=2*scale/(cols-1), ys=2*scale/(rows-1), hs=hScale/hRange;
+  const s=new Float32Array((rows-1)*(cols-1));
+  for(let r=0;r<rows-1;r++) for(let c=0;c<cols-1;c++){
+    const h00=g[r*cols+c],h10=g[r*cols+c+1],h01=g[(r+1)*cols+c],h11=g[(r+1)*cols+c+1];
+    const n=norm3([-(h10-h00+h11-h01)*.5*hs/xs,-(h01-h00+h11-h10)*.5*hs/ys,1]);
+    s[r*(cols-1)+c]=.28+(1-.28)*Math.max(0,dot3(n,sun));
+  }
+  return s;
+}
+
+// ─── Elevation color ──────────────────────────────────────────────────────────
+const RAMPS=[
+  {lo:0,   hi:500,  c0:[34,120,40],  c1:[80,140,55]},
+  {lo:500, hi:1000, c0:[90,130,55],  c1:[130,115,65]},
+  {lo:1000,hi:1800, c0:[135,110,65], c1:[165,130,85]},
+  {lo:1800,hi:2600, c0:[170,130,90], c1:[195,160,120]},
+  {lo:2600,hi:3400, c0:[195,165,125],c1:[215,195,160]},
+  {lo:3400,hi:9999, c0:[225,232,238],c1:[255,255,255]},
+];
+function elvRGB(h){
+  for(const r of RAMPS)if(h<r.hi){
+    const t=Math.max(0,Math.min(1,(h-r.lo)/(r.hi-r.lo)));
+    return[r.c0[0]+t*(r.c1[0]-r.c0[0]),r.c0[1]+t*(r.c1[1]-r.c0[1]),r.c0[2]+t*(r.c1[2]-r.c0[2])];
+  }
+  return[255,255,255];
+}
+
+// ─── Load terrain ─────────────────────────────────────────────────────────────
+let _loadId=0; // increments with each load — stale loads detect mismatch and abort
+
+async function loadTerrain(lon,lat,name){
+  // Cancel any in-progress load
+  const myId=++_loadId;
+  const t0=performance.now();
+  showLoad(true,true); prog(0,'Verbinde mit swisstopo…');
+  curLon=lon; curLat=lat; curName=name;
+  const sizeM=parseInt(document.getElementById('sel-size').value);
+  const gridN=parseInt(document.getElementById('sel-grid').value);
+  curSize=sizeM; curGrid=gridN;
+
+  try{
+    const[rawGrid]=await Promise.all([
+      fetchH(lon,lat,sizeM,gridN,gridN,myId),
+      loadTex(lon,lat,sizeM,texMode),
+    ]);
+    // Stale check: if a newer load started while we were fetching, discard
+    if(myId!==_loadId){ console.log('Load cancelled (stale)'); return false; }
+
+    prog(.93,'Interpoliere…');
+    hCols=gridN*2; hRows=gridN*2;
+    hGrid=upsample(rawGrid,gridN,gridN,hCols,hRows);
+
+    if(myId!==_loadId){ return false; } // stale check again after CPU work
+
+    // Only reset view on new location (not param changes)
+    if(name!==curName||Math.abs(lon-curLon)>.001||Math.abs(lat-curLat)>.001){
+      zoom=1; panX=0; panY=0; rotX=52; rotZ=-28;
+    }
+
+    prog(1,'Zeichne…');
+    await new Promise(r=>setTimeout(r,20));
+    if(myId!==_loadId){ return false; }
+    redraw();
+    document.getElementById('hdr-loc').textContent=name;
+    showLoad(false);
+  }catch(e){
+    if(myId===_loadId){ prog(0,'⚠ '+e.message); showLoad(false); }
+    console.error(e);
+  }
+  return true;
+}
+
+// ─── 3D projection ────────────────────────────────────────────────────────────
+function proj3(x,y,z,rx=rotX,rz=rotZ){
+  const rxr=rx*Math.PI/180, rzr=rz*Math.PI/180;
+  const x1=x*Math.cos(rzr)-y*Math.sin(rzr);
+  const y1=x*Math.sin(rzr)+y*Math.cos(rzr);
+  return{px:x1, py:y1*Math.cos(rxr)-z*Math.sin(rxr)};
+}
+
+// ─── Affine texture mapping ───────────────────────────────────────────────────
+// Draw a textured quad using two triangles with canvas transform.
+// This is the correct approach — no bounding box approximation.
+// Each triangle is rendered by:
+//   1. Save context
+//   2. Clip to triangle
+//   3. Set transform to map texture triangle → screen triangle
+//   4. drawImage
+//   5. Restore
+function drawTexTriangle(ctx, img,
+  // Screen points (px,py)
+  x0,y0, x1,y1, x2,y2,
+  // Texture points (u,v) in pixels
+  u0,v0, u1,v1, u2,v2
+){
+  // We need a transform M such that:
+  //   M * [u0,v0,1] = [x0,y0]
+  //   M * [u1,v1,1] = [x1,y1]
+  //   M * [u2,v2,1] = [x2,y2]
+  // M is a 2x3 affine matrix [a,b,c; d,e,f]
+  // Solving:
+  const denom=(u0*(v1-v2)+u1*(v2-v0)+u2*(v0-v1));
+  if(Math.abs(denom)<0.001) return; // degenerate
+
+  const a=((x0*(v1-v2)+x1*(v2-v0)+x2*(v0-v1))/denom);
+  const b=((x0*(u2-u1)+x1*(u0-u2)+x2*(u1-u0))/denom);
+  const c=((x0*(u1*v2-u2*v1)+x1*(u2*v0-u0*v2)+x2*(u0*v1-u1*v0))/denom);
+  const d=((y0*(v1-v2)+y1*(v2-v0)+y2*(v0-v1))/denom);
+  const e=((y0*(u2-u1)+y1*(u0-u2)+y2*(u1-u0))/denom);
+  const f=((y0*(u1*v2-u2*v1)+y1*(u2*v0-u0*v2)+y2*(u0*v1-u1*v0))/denom);
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(x0,y0); ctx.lineTo(x1,y1); ctx.lineTo(x2,y2);
+  ctx.closePath(); ctx.clip();
+  ctx.transform(a,d,b,e,c,f);
+  ctx.globalAlpha=1.0;
+  ctx.drawImage(img,0,0);
+  ctx.restore();
+}
+
+// Draw a quad with texture using 2 triangles
+function drawTexQuad(ctx, img,
+  sx0,sy0, sx1,sy1, sx2,sy2, sx3,sy3,  // screen: TL,TR,BR,BL
+  tu0,tv0, tu1,tv1, tu2,tv2, tu3,tv3   // texture UV in pixels
+){
+  // Triangle 1: TL, TR, BR
+  drawTexTriangle(ctx,img, sx0,sy0,sx1,sy1,sx2,sy2, tu0,tv0,tu1,tv1,tu2,tv2);
+  // Triangle 2: TL, BR, BL
+  drawTexTriangle(ctx,img, sx0,sy0,sx2,sy2,sx3,sy3, tu0,tv0,tu2,tv2,tu3,tv3);
+}
+
+// ─── Resize ───────────────────────────────────────────────────────────────────
+function resizeCanvas(){
+  const p=document.getElementById('panel-block');
+  const w=p.clientWidth, h=p.clientHeight;
+  if(w>0&&h>0){canvas.width=w; canvas.height=h;}
+}
+
+// ─── Main draw ────────────────────────────────────────────────────────────────
+// ─── Offscreen block canvas (render once, blit fast) ─────────────────────────
+let offBlock=null, offCtx=null;
+let offW=0, offH=0;
+let blockCenterX=0, blockCenterY=0; // centre of block in offscreen coords
+
+const RENDER_SCALE=3; // offscreen is 3× panel size → sharp up to zoom=3
+function getOffSize(){
+  const p=document.getElementById('panel-block');
+  const dpr=Math.min(window.devicePixelRatio||1, 2); // cap at 2× for perf
+  const w=Math.max(p.clientWidth||600,200)*RENDER_SCALE*dpr;
+  const h=Math.max(p.clientHeight||400,200)*RENDER_SCALE*dpr;
+  return{w:Math.round(w), h:Math.round(h), dpr, panelW:p.clientWidth, panelH:p.clientHeight};
+}
+
+// Full geometry render into offscreen canvas (called on data/rotation change)
+let _isRendering=false;
+function renderBlock(){
+  if(!hGrid||_isRendering) return;
+  _isRendering=true;
+  const{w,h,panelW,panelH}=getOffSize();
+  if(!offBlock||offBlock.width!==w||offBlock.height!==h){
+    offBlock=Object.assign(document.createElement('canvas'),{width:w,height:h});
+    offCtx=offBlock.getContext('2d');
+  }
+  offW=w; offH=h;
+  const oc=offCtx;
+  oc.imageSmoothingEnabled=true;
+  oc.imageSmoothingQuality='high';
+
+  const exag=parseFloat(document.getElementById('sel-exag').value);
+  const cols=hCols, rows=hRows;
+
+  let minH=Infinity,maxH=-Infinity;
+  for(let i=0;i<hGrid.length;i++){if(hGrid[i]<minH)minH=hGrid[i];if(hGrid[i]>maxH)maxH=hGrid[i];}
+  const hRange=maxH-minH||1;
+  // Scale to fill offscreen canvas nicely
+  const scale=Math.min(w*.38,h*.28);
+  const hScale=scale*.45*exag;
+  const BASE=-hScale*.04;
+
+  shades=computeShades(hGrid,cols,rows,hRange,hScale,scale);
+  // Store for blit() overlay use
+  renderBlock._minH=minH; renderBlock._maxH=maxH;
+
+  function sp(c,r){
+    const{px,py}=proj3((c/(cols-1)-.5)*2*scale,(r/(rows-1)-.5)*2*scale,((hGrid[r*cols+c]-minH)/hRange)*hScale+BASE);
+    return{sx:px,sy:py};
+  }
+  function bp(c,r){
+    const{px,py}=proj3((c/(cols-1)-.5)*2*scale,(r/(rows-1)-.5)*2*scale,BASE);
+    return{sx:px,sy:py};
+  }
+
+  // Find block bounding box to auto-centre in offscreen canvas
+  const corners=[sp(0,0),sp(cols-1,0),sp(0,rows-1),sp(cols-1,rows-1),bp(0,0),bp(cols-1,rows-1)];
+  const pxMin=Math.min(...corners.map(p=>p.sx)), pxMax=Math.max(...corners.map(p=>p.sx));
+  const pyMin=Math.min(...corners.map(p=>p.sy)), pyMax=Math.max(...corners.map(p=>p.sy));
+  // Centre in offscreen coords
+  const cx=w/2-(pxMin+pxMax)/2;
+  const cy=h/2-(pyMin+pyMax)/2;
+  blockCenterX=w/2; blockCenterY=h/2; // for blit alignment
+
+  function sc(p){return{cx:cx+p.sx,cy:cy+p.sy};}
+
+  // Texture UV
+  const ctrLV=wgsToLV(curLon,curLat);
+  const halfM=curSize/2;
+  const tb=texBounds;
+  function tUV(c,r){
+    if(!tb)return{tu:0,tv:0};
+    const lE=ctrLV.E-halfM+(c/(cols-1))*curSize;
+    const lN=ctrLV.N+halfM-(r/(rows-1))*curSize;
+    const wg=lvToWgs(lE,lN);
+    return{
+      tu:((wg.lon-tb.lonMin)/(tb.lonMax-tb.lonMin))*tb.w,
+      tv:((tb.latMax-wg.lat)/(tb.latMax-tb.latMin))*tb.h
+    };
+  }
+
+  // Offscreen stays transparent — background drawn on main canvas in blit()
+  oc.clearRect(0,0,w,h);
+
+  // ── Visibility test (back-face culling) ──────────────────────────────────────
+  // Viewer direction in world coords derived from rotZ, rotX
+  const rzr=rotZ*Math.PI/180, rxr=rotX*Math.PI/180;
+  // Viewer direction in world: V = (sin(rz)*sin(rx), cos(rz)*sin(rx), cos(rx))
+  // Wall normal dot V > 0 → visible
+  // South (0,+1,0): cos(rz)*sin(rx) > 0
+  // North (0,-1,0): -cos(rz)*sin(rx) > 0
+  // East  (+1,0,0): sin(rz)*sin(rx) > 0
+  // West  (-1,0,0): -sin(rz)*sin(rx) > 0
+  const showSouth =  Math.cos(rzr)*Math.sin(rxr) > 0;
+  const showNorth = !showSouth;
+  const showEast  =  Math.sin(rzr)*Math.sin(rxr) > 0;
+  const showWest  = !showEast;
+  const showBottom= Math.cos(rxr) < 0; // only if tilted >90°
+
+  function wallFill(light){
+    return(ri,gi,bi)=>`rgb(${Math.floor(light+ri*.07)},${Math.floor(light-5+gi*.05)},${Math.floor(light-13+bi*.04)})`;
+  }
+
+  // Bottom face (only when visible)
+  if(showBottom){
+    const c=[[-1,-1],[1,-1],[1,1],[-1,1]].map(([sx,sy])=>{
+      const{px,py}=proj3(sx*scale,sy*scale,BASE);
+      return{cx:cx+px,cy:cy+py};
+    });
+    oc.beginPath();oc.moveTo(c[0].cx,c[0].cy);c.forEach(p=>oc.lineTo(p.cx,p.cy));
+    oc.closePath();oc.fillStyle='rgb(210,204,194)';oc.fill();
+  }
+
+  // Helper: draw a wall as ONE single polygon (no gaps)
+  function drawWall(topPts, botPts){
+    oc.beginPath();
+    oc.moveTo(topPts[0].cx, topPts[0].cy);
+    for(let i=1;i<topPts.length;i++) oc.lineTo(topPts[i].cx, topPts[i].cy);
+    oc.lineTo(botPts[botPts.length-1].cx, botPts[botPts.length-1].cy);
+    for(let i=botPts.length-2;i>=0;i--) oc.lineTo(botPts[i].cx, botPts[i].cy);
+    oc.closePath();
+    oc.fillStyle='rgb(210,204,194)';
+    oc.fill();
+  }
+
+  // Surface — two passes:
+  // Pass 1: always draw solid elevation color (seals all gaps, no transparency)
+  // Pass 2: if texture mode, draw texture ON TOP (affine mapped)
+  const useTex=(texMode!=='elev'&&texCanvas&&texBounds);
+
+  // Pass 1: solid elevation fill — painter's order depends on viewer direction
+  // Front-facing rows/cols must be drawn LAST (on top)
+  // showSouth → South is front → draw r 0→max (North first, South last)
+  // showNorth → North is front → draw r max→0 (South first, North last)
+  const rStart = showSouth ? 0 : rows-2;
+  const rEnd   = showSouth ? rows-2 : 0;
+  const rStep  = showSouth ? 1 : -1;
+  const cStart = showEast ? 0 : cols-2;
+  const cEnd   = showEast ? cols-2 : 0;
+  const cStep  = showEast ? 1 : -1;
+
+  for(let r=rStart; showSouth?(r<=rEnd):(r>=rEnd); r+=rStep){
+    for(let c=cStart; showEast?(c<=cEnd):(c>=cEnd); c+=cStep){
+      const TL=sc(sp(c,r)),TR=sc(sp(c+1,r)),BR=sc(sp(c+1,r+1)),BL=sc(sp(c,r+1));
+      const avgH=(hGrid[r*cols+c]+hGrid[r*cols+c+1]+hGrid[(r+1)*cols+c]+hGrid[(r+1)*cols+c+1])/4;
+      const sh=shades[r*(cols-1)+c];
+      const[ri,gi,bi]=elvRGB(avgH);
+      const col=`rgb(${Math.floor(ri*sh)},${Math.floor(gi*sh)},${Math.floor(bi*sh)})`;
+      oc.beginPath();oc.moveTo(TL.cx,TL.cy);oc.lineTo(TR.cx,TR.cy);
+      oc.lineTo(BR.cx,BR.cy);oc.lineTo(BL.cx,BL.cy);oc.closePath();
+      oc.fillStyle=col; oc.fill();
+      oc.strokeStyle=col; oc.lineWidth=0.5; oc.stroke();
+    }
+  }
+
+  // Pass 2: texture overlay — same draw order as pass 1
+  if(useTex){
+    for(let r=rStart; showSouth?(r<=rEnd):(r>=rEnd); r+=rStep){
+      for(let c=cStart; showEast?(c<=cEnd):(c>=cEnd); c+=cStep){
+        const TL=sc(sp(c,r)),TR=sc(sp(c+1,r)),BR=sc(sp(c+1,r+1)),BL=sc(sp(c,r+1));
+        const sh=shades[r*(cols-1)+c];
+        const t00=tUV(c,r),t10=tUV(c+1,r),t11=tUV(c+1,r+1),t01=tUV(c,r+1);
+        // Draw texture triangle (fully opaque — elevation below guarantees no gaps)
+        drawTexQuad(oc,texCanvas,
+          TL.cx,TL.cy,TR.cx,TR.cy,BR.cx,BR.cy,BL.cx,BL.cy,
+          t00.tu,t00.tv,t10.tu,t10.tv,t11.tu,t11.tv,t01.tu,t01.tv);
+        // Shading overlay
+        const dark=1-sh;
+        if(dark>0.03){
+          oc.save();
+          oc.beginPath();oc.moveTo(TL.cx,TL.cy);oc.lineTo(TR.cx,TR.cy);
+          oc.lineTo(BR.cx,BR.cy);oc.lineTo(BL.cx,BL.cy);oc.closePath();oc.clip();
+          oc.fillStyle=`rgba(0,0,0,${(dark*.55).toFixed(3)})`;oc.fill();
+          oc.restore();
+        }
+      }
+    }
+  }
+
+  // ── Walls drawn AFTER surface so they appear on top (painter's order) ────────
+  // Visible walls always face the viewer → always in foreground
+  if(showSouth){
+    const top=Array.from({length:cols},(_,c)=>sc(sp(c,rows-1)));
+    const bot=Array.from({length:cols},(_,c)=>sc(bp(c,rows-1)));
+    drawWall(top,bot);
+  }
+  if(showEast){
+    const top=Array.from({length:rows},(_,r)=>sc(sp(cols-1,r)));
+    const bot=Array.from({length:rows},(_,r)=>sc(bp(cols-1,r)));
+    drawWall(top,bot);
+  }
+  if(showWest){
+    const top=Array.from({length:rows},(_,r)=>sc(sp(0,r)));
+    const bot=Array.from({length:rows},(_,r)=>sc(bp(0,r)));
+    drawWall(top,bot);
+  }
+  if(showNorth){
+    const top=Array.from({length:cols},(_,c)=>sc(sp(c,0)));
+    const bot=Array.from({length:cols},(_,c)=>sc(bp(c,0)));
+    drawWall(top,bot);
+  }
+
+  // ── Edges — only draw visible ones ──────────────────────────────────────────
+  oc.strokeStyle='rgba(50,38,25,.55)';oc.lineWidth=1.2;
+
+  // Top surface edges (silhouette between surface and wall)
+  // A top edge is visible if the adjacent wall is visible
+  function topEdge(pts){oc.beginPath();pts.forEach((p,i)=>i===0?oc.moveTo(p.cx,p.cy):oc.lineTo(p.cx,p.cy));oc.stroke();}
+
+  if(showNorth){// North top edge
+    topEdge(Array.from({length:cols},(_,c)=>sc(sp(c,0))));
+  }
+  if(showSouth){// South top edge
+    topEdge(Array.from({length:cols},(_,c)=>sc(sp(c,rows-1))));
+  }
+  if(showWest){// West top edge
+    topEdge(Array.from({length:rows},(_,r)=>sc(sp(0,r))));
+  }
+  if(showEast){// East top edge
+    topEdge(Array.from({length:rows},(_,r)=>sc(sp(cols-1,r))));
+  }
+
+  // Vertical corner edges — only if BOTH adjacent walls are visible (silhouette corner)
+  // or if corner is on the silhouette boundary
+  // Corner visible if at least one adjacent wall is visible
+  // (XOR would be silhouette only; OR includes fully-visible outer corners too — correct)
+  const visCorners=[
+    {c:0,     r:0,      show: showNorth||showWest},   // NW corner
+    {c:cols-1,r:0,      show: showNorth||showEast},   // NE corner
+    {c:0,     r:rows-1, show: showSouth||showWest},   // SW corner
+    {c:cols-1,r:rows-1, show: showSouth||showEast},   // SE corner
+  ];
+  visCorners.forEach(({c,r,show})=>{
+    if(!show) return;
+    const top=sc(sp(c,r)), bot=sc(bp(c,r));
+    oc.beginPath();oc.moveTo(top.cx,top.cy);oc.lineTo(bot.cx,bot.cy);oc.stroke();
+  });
+
+  // Base edges — only visible base edges
+  if(showNorth){// North base edge
+    const a=sc(bp(0,0)),b=sc(bp(cols-1,0));
+    oc.beginPath();oc.moveTo(a.cx,a.cy);oc.lineTo(b.cx,b.cy);oc.stroke();
+  }
+  if(showSouth){// South base edge
+    const a=sc(bp(0,rows-1)),b=sc(bp(cols-1,rows-1));
+    oc.beginPath();oc.moveTo(a.cx,a.cy);oc.lineTo(b.cx,b.cy);oc.stroke();
+  }
+  if(showWest){// West base edge
+    const a=sc(bp(0,0)),b=sc(bp(0,rows-1));
+    oc.beginPath();oc.moveTo(a.cx,a.cy);oc.lineTo(b.cx,b.cy);oc.stroke();
+  }
+  if(showEast){// East base edge
+    const a=sc(bp(cols-1,0)),b=sc(bp(cols-1,rows-1));
+    oc.beginPath();oc.moveTo(a.cx,a.cy);oc.lineTo(b.cx,b.cy);oc.stroke();
+  }
+
+  // Scale bar drawn on main canvas in blit() — not here
+
+  // Title drawn in blit() as fixed UI overlay
+  _isRendering=false;
+}
+
+// Fast blit: copy offscreen → main canvas with zoom/pan transform
+function blit(){
+  resizeCanvas();
+  const W=canvas.width, H=canvas.height;
+  if(W<2||H<2||!offBlock) return;
+
+  ctx.clearRect(0,0,W,H);
+  ctx.imageSmoothingEnabled=true;
+  ctx.imageSmoothingQuality='high';
+
+  // Background
+  const bg=ctx.createRadialGradient(W/2,H/2,0,W/2,H/2,Math.max(W,H)*.7);
+  bg.addColorStop(0,'#141c28');bg.addColorStop(1,'#080c10');
+  ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
+
+  // offBlock is RENDER_SCALE*dpr times bigger than panel
+  // At zoom=1: draw it at panel size (shrink by RENDER_SCALE*dpr)
+  // At zoom=N: draw it at N*panel size
+  const dpr=Math.min(window.devicePixelRatio||1,2);
+  const displayW=offW/RENDER_SCALE/dpr*zoom;
+  const displayH=offH/RENDER_SCALE/dpr*zoom;
+  const sx=W/2+panX-displayW/2;
+  const sy=H/2+panY-displayH/2;
+  ctx.drawImage(offBlock, sx, sy, displayW, displayH);
+
+  // ── Fixed UI overlay (never zooms/pans) ─────────────────────────────────────
+
+  // Height scale bar — only in elevation mode, fixed bottom-right
+  if(texMode==='elev' && renderBlock._minH!==undefined){
+    const minH=renderBlock._minH, maxH=renderBlock._maxH;
+    const bH=100, bW=11;
+    // Fixed bottom-right position with safe margins
+    const margin=12;
+    const bx=W-margin-bW-32; // leave room for text labels
+    const by=H-margin-bH;    // anchored to bottom
+    const gr=ctx.createLinearGradient(0,by,0,by+bH);
+    gr.addColorStop(0,'#dff0f0');gr.addColorStop(.3,'#c0a878');
+    gr.addColorStop(.6,'#887040');gr.addColorStop(.85,'#4a8830');gr.addColorStop(1,'#226628');
+    ctx.fillStyle=gr;ctx.fillRect(bx,by,bW,bH);
+    ctx.strokeStyle='rgba(255,255,255,.2)';ctx.lineWidth=.5;ctx.strokeRect(bx,by,bW,bH);
+    ctx.font='9px "DM Mono",monospace';ctx.fillStyle='rgba(255,255,255,.75)';
+    ctx.textAlign='left';ctx.textBaseline='middle';
+    ctx.fillText(`${Math.round(maxH)} m`, bx+bW+3, by+4);
+    ctx.fillText(`${Math.round((maxH+minH)/2)} m`, bx+bW+3, by+bH/2);
+    ctx.fillText(`${Math.round(minH)} m`, bx+bW+3, by+bH-4);
+  }
+}
+
+// redraw = full render + blit (called on rotation/data change)
+// For zoom/pan only, call blit() directly
+function redraw(){
+  if(!hGrid)return;
+  renderBlock();
+  blit();
+}
+
+// ─── North / zoom controls ────────────────────────────────────────────────────
+function animateTo(fromZ,toZ,dur=400){
+  const t0=performance.now();
+  function step(now){
+    const p=Math.min(1,(now-t0)/dur);
+    const ease=1-Math.pow(1-p,3);
+    rotZ=fromZ+(toZ-fromZ)*ease;
+    redraw();
+    if(p<1)requestAnimationFrame(step);
+    else{rotZ=toZ;redraw();}
+  }
+  requestAnimationFrame(step);
+}
+window._rv=function(){zoom=1;panX=0;panY=0;rotX=52;animateTo(rotZ,-28);};
+
+// Dynamic tile reload removed — causes main thread block on heavy zoom
+let _blitRaf=null;
+function blitRaf(){
+  // Throttle blit to animation frame — prevents hammering GPU during rapid zoom
+  if(_blitRaf) return;
+  _blitRaf=requestAnimationFrame(()=>{ _blitRaf=null; blit(); });
+}
+window._az=function(factor,cx,cy){
+  if(canvas.width<2||canvas.height<2)resizeCanvas();
+  const W=canvas.width,H=canvas.height;
+  const ox=cx??W/2, oy=cy??H/2;
+  const wx=(ox-W/2-panX)/zoom, wy=(oy-H/2-panY)/zoom;
+  zoom=Math.max(.15,Math.min(10,zoom*factor));
+  panX=ox-W/2-wx*zoom; panY=oy-H/2-wy*zoom;
+  blitRaf();
+};
+window._rv=function(){zoom=1;panX=0;panY=0;rotX=52;rotZ=-28;redraw();};
+window._redraw=redraw;
+
+// ─── Mouse ────────────────────────────────────────────────────────────────────
+canvas.addEventListener('mousedown',e=>{dragging=true;lastMX=e.clientX;lastMY=e.clientY;canvas.style.cursor='grabbing';});
+window.addEventListener('mouseup',()=>{dragging=false;canvas.style.cursor='';});
+canvas.addEventListener('mousemove',e=>{
+  if(!dragging)return;
+  const dx=e.clientX-lastMX,dy=e.clientY-lastMY;
+  lastMX=e.clientX;lastMY=e.clientY;
+  if(e.shiftKey){panX+=dx;panY+=dy;blitRaf();}
+  else{rotZ-=dx*.35;rotX=Math.max(10,Math.min(85,rotX-dy*.35));redraw();}
+});
+canvas.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const r=canvas.getBoundingClientRect();
+  window._az(e.deltaY<0?1.1:.91,e.clientX-r.left,e.clientY-r.top);
+},{passive:false});
+
+// ─── Touch ────────────────────────────────────────────────────────────────────
+canvas.addEventListener('touchstart',e=>{
+  e.preventDefault();
+  if(e.touches.length===1){
+    touchMode='rot';touch1={x:e.touches[0].clientX,y:e.touches[0].clientY};
+  }else if(e.touches.length>=2){
+    touchMode='pinch';
+    touch1={x:e.touches[0].clientX,y:e.touches[0].clientY};
+    touch2={x:e.touches[1].clientX,y:e.touches[1].clientY};
+    pinchDist=Math.hypot(touch2.x-touch1.x,touch2.y-touch1.y);
+    const r=canvas.getBoundingClientRect();
+    pinchCx=(touch1.x+touch2.x)/2-r.left; pinchCy=(touch1.y+touch2.y)/2-r.top;
+  }
+},{passive:false});
+
+canvas.addEventListener('touchmove',e=>{
+  e.preventDefault();
+  if(touchMode==='rot'&&e.touches.length===1){
+    const dx=e.touches[0].clientX-touch1.x, dy=e.touches[0].clientY-touch1.y;
+    touch1={x:e.touches[0].clientX,y:e.touches[0].clientY};
+    rotZ-=dx*.35; rotX=Math.max(10,Math.min(85,rotX-dy*.35)); redraw(); // full re-render on rotate
+  }else if(touchMode==='pinch'&&e.touches.length>=2){
+    const t1={x:e.touches[0].clientX,y:e.touches[0].clientY};
+    const t2={x:e.touches[1].clientX,y:e.touches[1].clientY};
+    const newD=Math.hypot(t2.x-t1.x,t2.y-t1.y);
+    const r=canvas.getBoundingClientRect();
+    const newCx=(t1.x+t2.x)/2-r.left, newCy=(t1.y+t2.y)/2-r.top;
+    if(pinchDist) window._az(newD/pinchDist,pinchCx,pinchCy);
+    panX+=newCx-pinchCx; panY+=newCy-pinchCy;
+    pinchDist=newD; pinchCx=newCx; pinchCy=newCy;
+    touch1=t1; touch2=t2; // blitRaf called by _az
+  }
+},{passive:false});
+
+canvas.addEventListener('touchend',e=>{
+  if(e.touches.length===0){touchMode=null;pinchDist=null;}
+  else if(e.touches.length===1){touchMode='rot';touch1={x:e.touches[0].clientX,y:e.touches[0].clientY};pinchDist=null;}
+},{passive:false});
+
+// ─── Bottom Sheet ─────────────────────────────────────────────────────────────
+const sheet=document.getElementById('bottom-sheet');
+const handle=document.getElementById('sheet-handle');
+let sheetOpen=false;
+let sheetDragY=null, sheetDragStart=null;
+
+window._ts=function(){
+  sheetOpen=!sheetOpen;
+  sheet.classList.toggle('open',sheetOpen);
+};
+
+// Touch drag on handle
+handle.addEventListener('touchstart',e=>{
+  sheetDragStart=e.touches[0].clientY;
+  sheetDragY=sheetDragStart;
+  sheet.style.transition='none';
+},{passive:true});
+handle.addEventListener('touchmove',e=>{
+  const dy=e.touches[0].clientY-sheetDragStart;
+  sheetDragY=e.touches[0].clientY;
+  const h=sheet.offsetHeight-22;
+  if(sheetOpen){
+    // dragging down to close
+    const clamped=Math.max(0,dy);
+    sheet.style.transform=`translateY(${clamped}px)`;
+  } else {
+    // dragging up to open
+    const clamped=Math.max(-h,Math.min(0,dy));
+    sheet.style.transform=`translateY(calc(100% - 22px + ${clamped}px))`;
+  }
+},{passive:true});
+handle.addEventListener('touchend',e=>{
+  sheet.style.transition='';
+  sheet.style.transform='';
+  const dy=sheetDragY-sheetDragStart;
+  if(sheetOpen && dy>40) { sheetOpen=false; sheet.classList.remove('open'); }
+  else if(!sheetOpen && dy<-40) { sheetOpen=true; sheet.classList.add('open'); }
+  else { sheet.classList.toggle('open',sheetOpen); }
+  sheetDragStart=null;
+},{passive:true});
+
+// Close sheet when tapping canvas
+canvas.addEventListener('pointerdown',()=>{
+  if(sheetOpen){sheetOpen=false;sheet.classList.remove('open');}
+});
+
+// ─── Search + Autocomplete ────────────────────────────────────────────────────
+let _acTimer=null, _acResults=[], _acIdx=-1, _acMarkers=[];
+
+function _acClose(){
+  document.getElementById('srch-drop').classList.remove('open');
+  _acIdx=-1;
+}
+function _acClearPreview(){
+  _acMarkers.forEach(m=>leafMap.removeLayer(m));
+  _acMarkers=[];
+}
+function _acShowPreview(lon,lat){
+  _acClearPreview();
+  const m=L.circleMarker([lat,lon],{radius:7,color:'#58a6ff',weight:2,fillColor:'#58a6ff',fillOpacity:.25}).addTo(leafMap);
+  _acMarkers.push(m);
+  leafMap.setView([lat,lon],13,{animate:true});
+}
+
+async function _acFetch(q){
+  if(q.length<2){_acClose();_acClearPreview();return;}
+  try{
+    const base=`https://api3.geo.admin.ch/rest/services/api/SearchServer?searchText=${encodeURIComponent(q)}&sr=4326&lang=de&limit=10`;
+    const [dLoc, dFeat]=await Promise.all([
+      fetch(`${base}&type=locations`).then(r=>r.json()).catch(()=>({results:[]})),
+      fetch(`${base}&type=featuresearch&features=ch.swisstopo.swissnames3d`).then(r=>r.json()).catch(()=>({results:[]})),
+    ]);
+    const seen=new Set();
+    const parse=r=>({
+      name:r.attrs.label.replace(/<[^>]+>/g,''),
+      detail:(r.attrs.detail||r.attrs.featureId||'').replace(/<[^>]+>/g,''),
+      lon:parseFloat(r.attrs.lon??r.attrs.x),
+      lat:parseFloat(r.attrs.lat??r.attrs.y)
+    });
+    const all=[...(dLoc.results||[]).map(parse), ...(dFeat.results||[]).map(parse)]
+      .filter(r=>{
+        if(!r.lon||!r.lat||isNaN(r.lon)||isNaN(r.lat))return false;
+        const key=`${r.name}|${r.lon.toFixed(3)}`;
+        if(seen.has(key))return false;
+        seen.add(key);return true;
+      }).slice(0,15);
+    _acResults=all;
+    _acRender();
+  }catch(e){}
+}
+
+function _acRender(){
+  const drop=document.getElementById('srch-drop');
+  drop.innerHTML='';
+  if(!_acResults.length){_acClose();return;}
+  _acResults.forEach((r,i)=>{
+    const div=document.createElement('div');
+    div.className='srch-item';
+    div.innerHTML=`${r.name}${r.detail?`<em>${r.detail}</em>`:''}`;
+    // Use touchstart/touchend to distinguish tap vs scroll
+    let _touchY=null;
+    div.addEventListener('touchstart',e=>{_touchY=e.touches[0].clientY;},{passive:true});
+    div.addEventListener('touchend',e=>{
+      if(_touchY!==null&&Math.abs(e.changedTouches[0].clientY-_touchY)<8){
+        e.preventDefault();
+        _acSelect(i);
+      }
+      _touchY=null;
+    },{passive:false});
+    // Mouse click for desktop
+    div.addEventListener('mousedown',e=>{e.preventDefault();_acSelect(i);});
+    drop.appendChild(div);
+  });
+  drop.classList.add('open');
+  _acIdx=-1;
+}
+
+function _acSelect(i){
+  const r=_acResults[i];
+  if(!r)return;
+  document.getElementById('srch-input').value=r.name;
+  _acClose();
+  _acClearPreview();
+  leafMap.setView([r.lat,r.lon],13);
+  // Karte zentrieren — Blockbild wird erst durch Antippen der Karte geladen
+}
+
+window._ds=async function(){
+  if(_acResults.length&&_acIdx>=0){_acSelect(_acIdx);return;}
+  if(_acResults.length){_acSelect(0);return;}
+  const q=document.getElementById('srch-input').value.trim(); if(!q)return;
+  document.getElementById('srch-btn').disabled=true;
+  try{
+    const d=await fetch(`https://api3.geo.admin.ch/rest/services/api/SearchServer?searchText=${encodeURIComponent(q)}&type=locations&sr=4326&lang=de`).then(r=>r.json());
+    if(d.results?.length){
+      const a=d.results[0].attrs;
+      const lon=parseFloat(a.lon),lat=parseFloat(a.lat);
+      leafMap.setView([lat,lon],13);
+    }
+  }catch(e){}
+  document.getElementById('srch-btn').disabled=false;
+};
+
+window._lp=function(k){
+  const p=PRESETS[k];
+  document.getElementById('srch-input').value=p.name;
+  leafMap.setView([p.lat,p.lon],12);
+  pick(p.lon,p.lat,p.name);
+};
+
+window._stex=function(mode){
+  texMode=mode;
+  const sel=document.getElementById('sel-tex');
+  if(sel) sel.value=mode;
+  if(hGrid)loadTerrain(curLon,curLat,curName);
+};
+let _paramTimer=null;
+window._opc=function(){
+  // Debounce: wait 300ms after last change before loading
+  clearTimeout(_paramTimer);
+  _paramTimer=setTimeout(()=>{
+    if(curLon!==0) loadTerrain(curLon,curLat,curName);
+  },300);
+};
+
+// ─── UI helpers ───────────────────────────────────────────────────────────────
+function showLoad(v,cancellable=false){
+  document.getElementById('loading').classList.toggle('hidden',!v);
+  document.body.classList.toggle('loading',v);
+  // Show cancel button only for cancellable loads (data fetching, not search)
+  const cb=document.getElementById('load-cancel-btn');
+  if(cb) cb.style.display=(v&&cancellable)?'block':'none';
+  if(v&&cancellable){
+    document.getElementById('load-title').textContent='Lade Gelände…';
+  } else if(v){
+    document.getElementById('load-title').textContent='Suche…';
+  }
+}
+function prog(f,msg){
+  document.getElementById('prog-fill').style.width=(f*100).toFixed(1)+'%';
+  document.getElementById('prog-pct').textContent=Math.round(f*100)+'%';
+  if(msg) document.getElementById('load-msg').textContent=msg;
+}
+window._cancelLoad=function(){
+  // Bump _loadId so current fetch loop detects stale and aborts
+  _loadId++;
+  showLoad(false);
+  // Restore previous good state if available
+  if(hGrid) blit();
+};
+
+const srchInput=document.getElementById('srch-input');
+const srchClear=document.getElementById('srch-clear');
+window._cs=function(){
+  srchInput.value='';
+  srchClear.classList.remove('show');
+  _acClose();_acClearPreview();
+  srchInput.focus();
+};
+srchInput.addEventListener('input',e=>{
+  srchClear.classList.toggle('show',e.target.value.length>0);
+  clearTimeout(_acTimer);
+  _acTimer=setTimeout(()=>_acFetch(e.target.value.trim()),220);
+});
+srchInput.addEventListener('keydown',e=>{
+  if(e.key==='Enter'){window._ds();return;}
+  if(e.key==='Escape'){_acClose();_acClearPreview();return;}
+  const items=document.querySelectorAll('.srch-item');
+  if(!items.length)return;
+  if(e.key==='ArrowDown'){
+    e.preventDefault();
+    _acIdx=Math.min(_acIdx+1,items.length-1);
+    items.forEach((el,i)=>el.classList.toggle('active',i===_acIdx));
+    if(_acIdx>=0)_acShowPreview(_acResults[_acIdx].lon,_acResults[_acIdx].lat);
+  }else if(e.key==='ArrowUp'){
+    e.preventDefault();
+    _acIdx=Math.max(_acIdx-1,0);
+    items.forEach((el,i)=>el.classList.toggle('active',i===_acIdx));
+    if(_acIdx>=0)_acShowPreview(_acResults[_acIdx].lon,_acResults[_acIdx].lat);
+  }
+});
+srchInput.addEventListener('blur',()=>setTimeout(_acClose,300));
+window.addEventListener('resize',()=>{if(hGrid&&activeTab==='block')redraw();leafMap.invalidateSize();});
+
+} // end init
+</script>
+</body>
+</html>

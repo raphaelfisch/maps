@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Routen-Zeichner</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root {
+    --bg: #f5f3ee;
+    --card: #ffffff;
+    --text: #1a1a1a;
+    --muted: #888;
+    --border: #e2dfda;
+    --accent: #2d6a4f;
+    --accent-light: #e6f2ec;
+    --danger: #c1121f;
+    --danger-light: #fde8ea;
+    --target-ok: #2d6a4f;
+    --target-bad: #c1121f;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: system-ui, -apple-system, sans-serif; background:var(--bg); color:var(--text); height:100vh; display:flex; flex-direction:column; overflow:hidden; }
+
+  header { display:flex; align-items:center; gap:12px; padding:10px 18px; background:var(--card); border-bottom:1px solid var(--border); z-index:1000; flex-shrink:0; }
+  header .logo { width:36px;height:36px;background:var(--accent);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:17px; }
+  header h1 { font-size:1.05rem; font-weight:700; }
+  header .sub { font-size:0.72rem; color:var(--muted); }
+  .mode-pill { margin-left:auto; padding:5px 14px; border-radius:20px; font-size:0.72rem; font-weight:600; }
+  .mode-pill.active { background:var(--accent); color:white; animation:pulse 2s infinite; }
+  .mode-pill.idle { background:var(--bg); color:var(--muted); border:1px solid var(--border); }
+  @keyframes pulse { 0%,100%{box-shadow:0 0 0 0 rgba(45,106,79,.3)} 50%{box-shadow:0 0 0 6px rgba(45,106,79,0)} }
+
+  .main { display:flex; flex:1; overflow:hidden; }
+
+  /* Sidebar */
+  .sidebar { width:320px; background:var(--card); border-right:1px solid var(--border); display:flex; flex-direction:column; }
+  .sidebar-scroll { flex:1; overflow-y:auto; padding:10px; }
+  .sidebar-scroll::-webkit-scrollbar { width:4px; }
+  .sidebar-scroll::-webkit-scrollbar-thumb { background:var(--border); border-radius:4px; }
+
+  .slot { border:2px solid var(--border); border-radius:10px; padding:10px 12px; margin-bottom:6px; cursor:pointer; transition:all .15s; }
+  .slot:hover { border-color:#ccc; }
+  .slot.active { border-color:var(--accent); background:var(--accent-light); }
+  .slot.empty { border-style:dashed; opacity:.55; }
+  .slot.empty:hover { opacity:1; }
+
+  .slot-top { display:flex; align-items:center; gap:10px; }
+  .slot-dot { width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:.75rem;flex-shrink:0; }
+  .slot-name { flex:1; }
+  .slot-name input { border:none;background:transparent;font:inherit;font-weight:600;font-size:.85rem;width:100%;outline:none;color:var(--text); }
+  .slot-dist { font-size:.78rem; font-weight:700; white-space:nowrap; }
+  .slot-dist.ok { color:var(--target-ok); }
+  .slot-dist.bad { color:var(--target-bad); }
+
+  .slot-info { font-size:.7rem; color:var(--muted); margin-top:3px; padding-left:36px; }
+  .slot-actions { display:flex; gap:5px; margin-top:6px; padding-left:36px; flex-wrap:wrap; }
+
+  .btn-s { font-family:inherit;font-size:.68rem;font-weight:600;padding:3px 9px;border-radius:6px;border:1px solid var(--border);background:white;color:var(--text);cursor:pointer;transition:all .12s; }
+  .btn-s:hover { background:var(--bg); }
+  .btn-s.red { color:var(--danger);border-color:var(--danger); }
+  .btn-s.red:hover { background:var(--danger-light); }
+
+  .sidebar-bottom { padding:10px; border-top:1px solid var(--border); background:var(--bg); }
+  .btn-main { width:100%;padding:9px;border:none;border-radius:9px;background:var(--accent);color:white;font-family:inherit;font-size:.8rem;font-weight:600;cursor:pointer; }
+  .btn-main:hover { background:#245a42; }
+  .btn-main:disabled { opacity:.35;cursor:not-allowed; }
+  .row2 { display:flex;gap:6px;margin-top:6px; }
+  .btn-sec { flex:1;padding:7px;border:1px solid var(--border);border-radius:7px;background:white;font-family:inherit;font-size:.7rem;font-weight:600;cursor:pointer;color:var(--text); }
+  .btn-sec:hover { background:var(--bg); }
+
+  /* Map */
+  .map-wrap { flex:1; position:relative; }
+  #map { width:100%; height:100%; }
+
+  /* Live distance bar */
+  .dist-bar { position:absolute;bottom:24px;left:50%;transform:translateX(-50%);border-radius:14px;padding:10px 28px;font-size:1.2rem;font-weight:700;box-shadow:0 4px 20px rgba(0,0,0,.2);z-index:1000;display:none;text-align:center;color:white;letter-spacing:.3px; }
+  .dist-bar .sub { font-size:.65rem;font-weight:500;opacity:.8;margin-bottom:1px; }
+  .dist-bar.ok { background:var(--target-ok); }
+  .dist-bar.bad { background:var(--target-bad); }
+  .dist-bar.neutral { background:var(--text); }
+
+  /* Help */
+  .help { position:absolute;top:10px;right:10px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;font-size:.72rem;line-height:1.6;box-shadow:0 2px 12px rgba(0,0,0,.06);z-index:1000;max-width:240px;color:var(--muted); }
+  .help strong { color:var(--text); }
+  .help kbd { display:inline-block;background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:0 5px;font-size:.68rem;font-weight:600;color:var(--text); }
+
+  /* Layer switcher */
+  .layer-switch { position:absolute;top:10px;left:60px;z-index:1000;display:flex;gap:0;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.1);border:1px solid var(--border); }
+  .layer-btn { padding:6px 12px;font-family:inherit;font-size:.7rem;font-weight:600;border:none;cursor:pointer;background:white;color:var(--text);transition:all .12s; }
+  .layer-btn.active { background:var(--accent);color:white; }
+  .layer-btn:hover:not(.active) { background:var(--bg); }
+
+  .leaflet-control-zoom { border:1px solid var(--border)!important;border-radius:8px!important;overflow:hidden; }
+  .leaflet-control-zoom a { width:32px!important;height:32px!important;line-height:32px!important;font-size:15px!important;color:var(--text)!important; }
+
+  /* Mobile tab toggle */
+  .mobile-tabs { display:none; }
+
+  /* Mobile help toggle */
+  .help-toggle { display:none; }
+
+  @media(max-width:850px) {
+    .mobile-tabs {
+      display:flex; z-index:1001; border-bottom:1px solid var(--border); background:var(--card); flex-shrink:0;
+    }
+    .mobile-tabs button {
+      flex:1; padding:10px; font-family:inherit; font-size:.82rem; font-weight:600;
+      border:none; background:var(--bg); color:var(--muted); cursor:pointer;
+      border-bottom:3px solid transparent; transition:all .15s;
+    }
+    .mobile-tabs button.active {
+      background:var(--card); color:var(--accent); border-bottom-color:var(--accent);
+    }
+    .main { flex-direction:column; }
+    .sidebar { width:100%; border-right:none; border-top:1px solid var(--border); }
+    .sidebar.hidden { display:none; }
+    .map-wrap.hidden { display:none; }
+    .map-wrap:not(.hidden) { flex:1; }
+    .sidebar:not(.hidden) { flex:1; }
+
+    /* Hide desktop help, show toggle button */
+    .help { display:none; }
+    .help-toggle {
+      display:block; position:absolute; top:10px; right:10px; z-index:1000;
+      width:34px; height:34px; border-radius:8px; border:1px solid var(--border);
+      background:white; box-shadow:0 2px 8px rgba(0,0,0,.1);
+      font-size:.9rem; font-weight:700; color:var(--text); cursor:pointer;
+      font-family:inherit; line-height:34px; text-align:center; padding:0;
+    }
+    .help-mobile {
+      display:none; position:absolute; top:52px; right:10px; z-index:1000;
+      background:var(--card); border:1px solid var(--border); border-radius:10px;
+      padding:12px 14px; font-size:.72rem; line-height:1.6;
+      box-shadow:0 2px 12px rgba(0,0,0,.1); max-width:250px; color:var(--muted);
+    }
+    .help-mobile.show { display:block; }
+    .help-mobile strong { color:var(--text); }
+
+    /* Layer switch: bottom left, above attribution */
+    .layer-switch { left:10px; top:auto !important; bottom:30px; }
+    .layer-btn { padding:5px 10px; font-size:.65rem; }
+
+    /* Zoom: top left (Leaflet default) – no change needed */
+
+    .dist-bar { bottom:16px; padding:8px 20px; font-size:1rem; }
+    header h1 { font-size:.95rem; }
+    header .sub { font-size:.65rem; }
+    .mode-pill { padding:4px 10px; font-size:.65rem; }
+  }
+
+  /* ===== PRINT OVERLAY ===== */
+  .print-overlay {
+    display:none; position:fixed; inset:0; z-index:9999;
+    background:white; overflow-y:auto;
+  }
+  .print-overlay.show { display:block; }
+  .print-toolbar {
+    position:sticky; top:0; z-index:10000;
+    background:white; border-bottom:2px solid #ddd;
+    padding:12px 24px; display:flex; align-items:center; gap:12px;
+  }
+  .print-toolbar button {
+    padding:8px 20px; border-radius:8px; font-family:inherit; font-size:.85rem; font-weight:600; cursor:pointer; border:none;
+  }
+  .print-toolbar .btn-print { background:var(--accent); color:white; }
+  .print-toolbar .btn-close { background:#eee; color:var(--text); }
+  .print-toolbar span { font-size:.82rem; color:var(--muted); }
+
+  .print-page {
+    width:190mm; min-height:277mm; margin:10mm auto; padding:12mm;
+    background:white; box-shadow:0 0 12px rgba(0,0,0,.1);
+    page-break-after:always; position:relative;
+  }
+  .print-page:last-child { page-break-after:auto; }
+
+  .print-header {
+    display:flex; align-items:center; gap:14px;
+    border-bottom:2px solid var(--accent); padding-bottom:10px; margin-bottom:14px;
+  }
+  .print-route-num {
+    width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    color:white;font-weight:700;font-size:1rem;flex-shrink:0;
+  }
+  .print-title { font-size:1.3rem; font-weight:700; }
+  .print-dist { font-size:1rem; color:var(--muted); margin-top:2px; }
+  .print-school { margin-left:auto; text-align:right; font-size:.75rem; color:var(--muted); }
+
+  .print-map-container {
+    width:100%; height:165mm; border:1px solid #ddd; border-radius:6px; overflow:hidden;
+    position:relative; background:#f0f0f0;
+  }
+  .print-map-container canvas { display:block; width:100%; height:100%; }
+
+  .print-footer {
+    margin-top:10px; font-size:.7rem; color:var(--muted);
+    display:flex; justify-content:space-between;
+  }
+
+  @media print {
+    body > *:not(.print-overlay) { display:none !important; }
+    .print-overlay { display:block !important; position:static !important; }
+    .print-toolbar { display:none !important; }
+    .print-page {
+      box-shadow:none; margin:0; width:100%;
+      page-break-after:always; page-break-inside:avoid;
+    }
+    @page { size:A4 portrait; margin:8mm; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">🌿</div>
+  <div>
+    <h1>Routen-Zeichner</h1>
+    <div class="sub" id="headerSub">Ziel: 3.5–4.0 km pro Route</div>
+  </div>
+  <div class="mode-pill idle" id="modePill">Ansicht</div>
+</header>
+
+<div class="mobile-tabs" id="mobileTabs">
+  <button class="active" onclick="mobileTab('map')">Karte</button>
+  <button onclick="mobileTab('sidebar')">Routen</button>
+</div>
+
+<div class="main">
+  <div class="sidebar" id="sidebarPanel">
+    <div style="padding:10px 10px 0;border-bottom:1px solid var(--border);">
+      <label style="font-size:.7rem;font-weight:600;color:var(--muted);display:block;margin-bottom:3px;">📍 Startort</label>
+      <input type="text" id="schoolNameInput" value="Startort" placeholder="z.B. Schulhaus Ägelsee" 
+        style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:7px;font-family:inherit;font-size:.82rem;margin-bottom:8px;outline:none;"
+        onchange="schoolName=this.value;updateSchoolPopup();">
+      <div style="display:flex;gap:8px;margin-bottom:10px;">
+        <div style="flex:1;">
+          <label style="font-size:.7rem;font-weight:600;color:var(--muted);display:block;margin-bottom:3px;">Min. Distanz (m)</label>
+          <input type="number" id="targetMinInput" value="3500" step="100" min="0"
+            style="width:100%;padding:5px 8px;border:1px solid var(--border);border-radius:7px;font-family:inherit;font-size:.82rem;outline:none;"
+            onchange="TARGET_MIN=parseInt(this.value)||0;updateUI();">
+        </div>
+        <div style="flex:1;">
+          <label style="font-size:.7rem;font-weight:600;color:var(--muted);display:block;margin-bottom:3px;">Max. Distanz (m)</label>
+          <input type="number" id="targetMaxInput" value="4000" step="100" min="0"
+            style="width:100%;padding:5px 8px;border:1px solid var(--border);border-radius:7px;font-family:inherit;font-size:.82rem;outline:none;"
+            onchange="TARGET_MAX=parseInt(this.value)||0;updateUI();">
+        </div>
+      </div>
+    </div>
+    <div class="sidebar-scroll" id="slotList"></div>
+    <div class="sidebar-bottom">
+      <button class="btn-main" style="background:#40916c;" onclick="addRoute()">＋ Route hinzufügen</button>
+      <button class="btn-main" id="btnExport" disabled onclick="exportAllGPX()" style="margin-top:6px;">📦 Alle als GPX exportieren</button>
+      <button class="btn-main" style="margin-top:6px;background:#264653;" id="btnPrint" disabled onclick="openPrintView()">🖨️ Druckansicht (A4)</button>
+      <div class="row2">
+        <button class="btn-sec" onclick="saveProject()">💾 Speichern</button>
+        <button class="btn-sec" onclick="loadProject()">📂 Laden</button>
+      </div>
+    </div>
+  </div>
+  <div class="map-wrap" id="mapPanel">
+    <div id="map"></div>
+    <div class="dist-bar neutral" id="distBar"><div class="sub">Distanz</div><span id="distVal">0.00 km</span></div>
+    <div class="layer-switch">
+      <button class="layer-btn active" onclick="switchLayer('swisstopo')">Swisstopo</button>
+      <button class="layer-btn" onclick="switchLayer('swissimage')">Luftbild</button>
+      <button class="layer-btn" onclick="switchLayer('osm')">OSM</button>
+    </div>
+    <div class="help" id="helpBox">
+      <strong>So geht's</strong><br>
+      1. Startort per Drag verschieben<br>
+      2. Startort und Distanzziel oben links anpassen<br>
+      3. Route links wählen<br>
+      4. Auf Karte klicken = Punkt setzen<br>
+      5. Entlang der sichtbaren Wege klicken<br>
+      6. <kbd>Rechtsklick</kbd> auf Punkt = löschen<br>
+      7. Punkte verschieben per Drag<br>
+      8. «Schliessen» = zurück zum Start
+    </div>
+    <button class="help-toggle" onclick="document.getElementById('helpMobile').classList.toggle('show')">?</button>
+    <div class="help-mobile" id="helpMobile">
+      <strong>So geht's</strong><br>
+      1. Startort per Drag verschieben<br>
+      2. Zu «Routen» wechseln: Startort und Distanzziel anpassen<br>
+      3. Route wählen (wechselt automatisch zur Karte)<br>
+      4. Auf Karte tippen = Punkt setzen<br>
+      5. Entlang der sichtbaren Wege tippen<br>
+      6. Lang drücken auf Punkt = löschen<br>
+      7. Punkte verschieben per Drag<br>
+      8. «Schliessen» = zurück zum Start
+    </div>
+  </div>
+</div>
+
+<script>
+// ============ CONFIG ============
+let SCHOOL = [47.4470, 9.0356];
+let schoolName = 'Startort';
+let TARGET_MIN = 3500;
+let TARGET_MAX = 4000;
+
+const COLORS = ['#d62828','#e36414','#e9a820','#2d6a4f','#40916c','#52b788','#264653','#2a9d8f','#7b2cbf','#e76f51','#457b9d','#6a994e','#bc4749','#f4a261','#023047','#8338ec'];
+
+// ============ STATE ============
+let routes = [{ name:'Route 1', points:[], closed:false }];
+let activeIdx = null;
+let polylines = [null];
+let markers = [[]];
+
+// ============ MAP ============
+const map = L.map('map', {zoomControl:true, doubleClickZoom:false}).setView(SCHOOL, 15);
+
+// Tile layers
+const layers = {
+  swisstopo: L.tileLayer('https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.pixelkarte-farbe/default/current/3857/{z}/{x}/{y}.jpeg', {
+    attribution:'© <a href="https://www.swisstopo.admin.ch">swisstopo</a>', maxZoom:19, minZoom:8
+  }),
+  swissimage: L.tileLayer('https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.swissimage/default/current/3857/{z}/{x}/{y}.jpeg', {
+    attribution:'© <a href="https://www.swisstopo.admin.ch">swisstopo</a>', maxZoom:20, minZoom:8
+  }),
+  osm: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution:'© OpenStreetMap', maxZoom:19
+  })
+};
+let currentLayer = 'swisstopo';
+layers.swisstopo.addTo(map);
+
+// Fallback if swisstopo fails
+layers.swisstopo.on('tileerror', function() {
+  map.removeLayer(layers.swisstopo);
+  layers.osm.addTo(map);
+  currentLayer = 'osm';
+  document.querySelectorAll('.layer-btn').forEach(b => b.classList.toggle('active', b.textContent==='OSM'));
+});
+
+function switchLayer(name) {
+  map.removeLayer(layers[currentLayer]);
+  layers[name].addTo(map);
+  currentLayer = name;
+  document.querySelectorAll('.layer-btn').forEach(b => {
+    const labels = {swisstopo:'Swisstopo', swissimage:'Luftbild', osm:'OSM'};
+    b.classList.toggle('active', b.textContent === labels[name]);
+  });
+}
+
+// School marker (draggable!)
+const schoolMarker = L.marker(SCHOOL, {
+  icon: L.divIcon({
+    html:'<div style="width:30px;height:30px;border-radius:50%;background:#1e293b;display:flex;align-items:center;justify-content:center;font-size:15px;box-shadow:0 2px 8px rgba(0,0,0,.3);border:2px solid white;cursor:grab;">🏫</div>',
+    iconSize:[30,30], iconAnchor:[15,15], className:''
+  }),
+  draggable: true,
+  zIndexOffset:2000
+}).addTo(map);
+
+function updateSchoolPopup() {
+  schoolMarker.bindPopup(`<strong>${schoolName}</strong><br><span style="font-size:.8em;color:#888;">📍 ${SCHOOL[0].toFixed(5)}, ${SCHOOL[1].toFixed(5)}<br>Verschieben per Drag</span>`);
+}
+updateSchoolPopup();
+
+schoolMarker.on('dragend', function() {
+  const p = schoolMarker.getLatLng();
+  SCHOOL[0] = p.lat;
+  SCHOOL[1] = p.lng;
+  updateSchoolPopup();
+});
+
+// ============ HAVERSINE ============
+function haversine(a, b) {
+  const R=6371000, toRad=x=>x*Math.PI/180;
+  const dLat=toRad(b[0]-a[0]), dLng=toRad(b[1]-a[1]);
+  const s=Math.sin(dLat/2)**2 + Math.cos(toRad(a[0]))*Math.cos(toRad(b[0]))*Math.sin(dLng/2)**2;
+  return R*2*Math.atan2(Math.sqrt(s),Math.sqrt(1-s));
+}
+
+function totalDist(idx) {
+  const pts = routes[idx].points;
+  if (pts.length < 2) return 0;
+  let d = 0;
+  for (let i=1; i<pts.length; i++) d += haversine(pts[i-1], pts[i]);
+  if (routes[idx].closed && pts.length >= 2) d += haversine(pts[pts.length-1], pts[0]);
+  return d;
+}
+
+// ============ DRAWING ============
+function drawRoute(idx) {
+  if (polylines[idx]) { map.removeLayer(polylines[idx]); polylines[idx]=null; }
+  const pts = routes[idx].points;
+  if (pts.length < 2 && !routes[idx].closed) return;
+  let coords = pts.map(p=>[p[0],p[1]]);
+  if (routes[idx].closed && pts.length>=2) coords.push(coords[0]);
+  const isActive = activeIdx===idx;
+  polylines[idx] = L.polyline(coords, {
+    color:COLORS[idx % COLORS.length], weight:isActive?5:3, opacity:isActive?1:.4, lineJoin:'round', lineCap:'round'
+  }).addTo(map);
+}
+
+function createMarker(idx, ptIdx) {
+  const pt = routes[idx].points[ptIdx];
+  const m = L.marker(pt, {
+    draggable: activeIdx===idx,
+    icon: L.divIcon({
+      html:`<div style="width:14px;height:14px;border-radius:50%;background:${COLORS[idx % COLORS.length]};border:2.5px solid white;box-shadow:0 1px 4px rgba(0,0,0,.3);cursor:grab;"></div>`,
+      iconSize:[14,14], iconAnchor:[7,7], className:''
+    }),
+    zIndexOffset:1000
+  }).addTo(map);
+
+  m.on('dragend', function() {
+    const p = m.getLatLng();
+    routes[idx].points[ptIdx] = [p.lat, p.lng];
+    drawRoute(idx);
+    updateUI();
+  });
+  m.on('contextmenu', function(e) {
+    e.originalEvent.preventDefault();
+    removePoint(idx, ptIdx);
+  });
+  return m;
+}
+
+function rebuildMarkers(idx) {
+  markers[idx].forEach(m => map.removeLayer(m));
+  markers[idx] = [];
+  routes[idx].points.forEach((_, i) => {
+    markers[idx].push(createMarker(idx, i));
+  });
+}
+
+function addPoint(idx, latlng) {
+  if (routes[idx].closed) return;
+  routes[idx].points.push([latlng.lat, latlng.lng]);
+  markers[idx].push(createMarker(idx, routes[idx].points.length-1));
+  drawRoute(idx);
+  updateUI();
+}
+
+function removePoint(idx, ptIdx) {
+  routes[idx].points.splice(ptIdx, 1);
+  if (routes[idx].points.length < 2) routes[idx].closed = false;
+  rebuildMarkers(idx);
+  drawRoute(idx);
+  updateUI();
+}
+
+function undoLast(idx) {
+  if (routes[idx].closed) {
+    routes[idx].closed = false;
+    drawRoute(idx);
+    updateUI();
+    return;
+  }
+  if (routes[idx].points.length === 0) return;
+  routes[idx].points.pop();
+  const m = markers[idx].pop();
+  if (m) map.removeLayer(m);
+  drawRoute(idx);
+  updateUI();
+}
+
+function closeRoute(idx) {
+  if (routes[idx].points.length < 3) return;
+  routes[idx].closed = true;
+  drawRoute(idx);
+  updateUI();
+}
+
+function clearRoute(idx) {
+  if (!confirm('Route "'+routes[idx].name+'" wirklich löschen?')) return;
+  // Remove from map
+  markers[idx].forEach(m=>map.removeLayer(m));
+  if (polylines[idx]) map.removeLayer(polylines[idx]);
+  // Remove from arrays
+  routes.splice(idx, 1);
+  markers.splice(idx, 1);
+  polylines.splice(idx, 1);
+  // Fix active index
+  if (activeIdx === idx) activeIdx = null;
+  else if (activeIdx !== null && activeIdx > idx) activeIdx--;
+  // Redraw all routes (colors may shift)
+  routes.forEach((_, i) => {
+    rebuildMarkers(i);
+    drawRoute(i);
+  });
+  updateUI();
+}
+
+function addRoute() {
+  const n = routes.length + 1;
+  routes.push({ name: 'Route ' + n, points: [], closed: false });
+  polylines.push(null);
+  markers.push([]);
+  activeIdx = routes.length - 1;
+  updateUI();
+}
+
+// ============ SELECTION ============
+function selectRoute(idx) {
+  activeIdx = (activeIdx===idx) ? null : idx;
+
+  // Update polyline styles
+  for (let i=0; i<routes.length; i++) {
+    if (polylines[i]) {
+      polylines[i].setStyle({
+        weight: activeIdx===i?5:3,
+        opacity: activeIdx===null?.6 : (activeIdx===i?1:.25)
+      });
+    }
+    // Marker dragging
+    markers[i].forEach(m => {
+      if (activeIdx===i) m.dragging.enable(); else m.dragging.disable();
+      m.setOpacity(activeIdx===null?1:(activeIdx===i?1:.25));
+    });
+  }
+  updateUI();
+
+  // On mobile, switch to map view when a route is selected
+  if (activeIdx !== null && window.innerWidth <= 850) {
+    mobileTab('map');
+  }
+}
+
+// ============ MAP CLICK ============
+map.on('click', function(e) {
+  // Close mobile help if open
+  const mh = document.getElementById('helpMobile');
+  if (mh) mh.classList.remove('show');
+
+  if (activeIdx===null) return;
+  addPoint(activeIdx, e.latlng);
+});
+
+// ============ UI ============
+function updateUI() {
+  // Header subtitle
+  document.getElementById('headerSub').textContent = routes.length + ' Route' + (routes.length!==1?'n':'') + ' · Ziel: ' + (TARGET_MIN/1000).toFixed(1) + '–' + (TARGET_MAX/1000).toFixed(1) + ' km pro Route';
+
+  // Sidebar
+  const list = document.getElementById('slotList');
+  list.innerHTML = '';
+  routes.forEach((r, i) => {
+    const has = r.points.length > 0;
+    const isActive = activeIdx===i;
+    const d = totalDist(i);
+    const inRange = d>=TARGET_MIN && d<=TARGET_MAX;
+    const color = COLORS[i % COLORS.length];
+    const div = document.createElement('div');
+    div.className = `slot ${isActive?'active':''} ${has?'':'empty'}`;
+    div.innerHTML = `
+      <div class="slot-top">
+        <div class="slot-dot" style="background:${color}">${i+1}</div>
+        <div class="slot-name"><input type="text" value="${r.name}" onclick="event.stopPropagation()" onchange="routes[${i}].name=this.value" placeholder="Route ${i+1}"></div>
+        ${has?`<div class="slot-dist ${inRange?'ok':'bad'}">${(d/1000).toFixed(2)} km</div>`:''}
+      </div>
+      ${has
+        ? `<div class="slot-info">${r.points.length} Punkte · ${r.closed?'✅ geschlossen':'offen'}${inRange?' · ✅ im Zielbereich':d>0?' · '+(d<TARGET_MIN?'zu kurz':'zu lang'):''}</div>
+           <div class="slot-actions">
+             ${!r.closed && r.points.length>=3?'<button class="btn-s" onclick="event.stopPropagation();closeRoute('+i+')">🔄 Schliessen</button>':''}
+             <button class="btn-s" onclick="event.stopPropagation();undoLast(${i})">↩ Rückgängig</button>
+             <button class="btn-s" onclick="event.stopPropagation();exportGPX(${i})">📄 GPX</button>
+             <button class="btn-s red" onclick="event.stopPropagation();clearRoute(${i})">🗑</button>
+           </div>`
+        : `<div class="slot-info">Klicke hier, dann zeichne auf der Karte</div>
+           ${routes.length>1?'<div class="slot-actions"><button class="btn-s red" onclick="event.stopPropagation();clearRoute('+i+')">🗑 Entfernen</button></div>':''}`}
+    `;
+    div.addEventListener('click', () => selectRoute(i));
+    list.appendChild(div);
+  });
+
+  // Mode pill
+  const pill = document.getElementById('modePill');
+  if (activeIdx!==null) {
+    pill.className='mode-pill active';
+    pill.textContent=`✏️ Route ${activeIdx+1}`;
+  } else {
+    pill.className='mode-pill idle';
+    pill.textContent='Ansicht';
+  }
+
+  // Distance bar
+  const bar = document.getElementById('distBar');
+  if (activeIdx!==null) {
+    const d = totalDist(activeIdx);
+    bar.style.display='block';
+    const inRange = d>=TARGET_MIN && d<=TARGET_MAX;
+    bar.className = 'dist-bar ' + (d===0?'neutral':inRange?'ok':'bad');
+    document.getElementById('distVal').textContent = (d/1000).toFixed(2)+' km';
+  } else {
+    bar.style.display='none';
+  }
+
+  // Export button
+  const hasAny = routes.some(r=>r.points.length>=2);
+  document.getElementById('btnExport').disabled = !hasAny;
+  document.getElementById('btnPrint').disabled = !hasAny;
+}
+
+// ============ GPX ============
+function toGPX(idx) {
+  const r = routes[idx];
+  if (r.points.length<2) return null;
+  let pts = [...r.points];
+  if (r.closed) pts.push(pts[0]);
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Routen-Zeichner" xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata><name>${r.name}</name><desc>Naturkunde-Rundkurs, ${(totalDist(idx)/1000).toFixed(2)} km</desc></metadata>
+  <trk><name>${r.name}</name><trkseg>
+${pts.map(p=>`    <trkpt lat="${p[0].toFixed(7)}" lon="${p[1].toFixed(7)}"></trkpt>`).join('\n')}
+  </trkseg></trk>
+</gpx>`;
+}
+
+function exportGPX(idx) {
+  const gpx = toGPX(idx);
+  if (!gpx) return alert('Noch keine Punkte.');
+  dl(`route-${idx+1}-${routes[idx].name.replace(/\s+/g,'-')}.gpx`, gpx, 'application/gpx+xml');
+}
+
+function exportAllGPX() {
+  routes.forEach((_, i) => {
+    const g = toGPX(i);
+    if (g) setTimeout(()=>dl(`route-${i+1}-${routes[i].name.replace(/\s+/g,'-')}.gpx`, g, 'application/gpx+xml'), i*150);
+  });
+}
+
+function dl(name, content, type) {
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([content],{type}));
+  a.download=name; a.click();
+}
+
+// ============ SAVE / LOAD ============
+function saveProject() {
+  const data = {
+    school: { lat: SCHOOL[0], lng: SCHOOL[1], name: schoolName },
+    target: { min: TARGET_MIN, max: TARGET_MAX },
+    routes: routes.map(r=>({name:r.name, points:r.points, closed:r.closed}))
+  };
+  dl('routen-projekt.json', JSON.stringify(data,null,2), 'application/json');
+}
+
+function loadProject() {
+  const inp=document.createElement('input'); inp.type='file'; inp.accept='.json';
+  inp.onchange=async function(e) {
+    const f=e.target.files[0]; if(!f) return;
+    try {
+      const raw=JSON.parse(await f.text());
+      // Support both old format (array) and new format (object with school)
+      const data = Array.isArray(raw) ? raw : (raw.routes || []);
+      if (raw.school) {
+        SCHOOL[0] = raw.school.lat;
+        SCHOOL[1] = raw.school.lng;
+        if (raw.school.name) schoolName = raw.school.name;
+        schoolMarker.setLatLng(SCHOOL);
+        updateSchoolPopup();
+        document.getElementById('schoolNameInput').value = schoolName;
+        map.setView(SCHOOL, 15);
+      }
+      if (raw.target) {
+        TARGET_MIN = raw.target.min || 3500;
+        TARGET_MAX = raw.target.max || 4000;
+        document.getElementById('targetMinInput').value = TARGET_MIN;
+        document.getElementById('targetMaxInput').value = TARGET_MAX;
+      }
+      // Clear all existing routes
+      for (let i=0; i<routes.length; i++) {
+        markers[i].forEach(m=>map.removeLayer(m));
+        if(polylines[i]) map.removeLayer(polylines[i]);
+      }
+      routes = [];
+      markers = [];
+      polylines = [];
+      activeIdx = null;
+
+      // Load routes from file
+      for (let i=0; i<data.length; i++) {
+        routes.push({ name: data[i].name || ('Route '+(i+1)), points: data[i].points||[], closed: !!data[i].closed });
+        polylines.push(null);
+        markers.push([]);
+        rebuildMarkers(i);
+        drawRoute(i);
+      }
+      updateUI();
+    } catch(err) { alert('Fehler: '+err.message); }
+  };
+  inp.click();
+}
+
+// Escape to deselect
+document.addEventListener('keydown', e => { if(e.key==='Escape'){activeIdx=null; updateUI(); for(let i=0;i<routes.length;i++){if(polylines[i])polylines[i].setStyle({opacity:.6,weight:3});markers[i].forEach(m=>{m.dragging.disable();m.setOpacity(1);});}} });
+// Ctrl+Z to undo
+document.addEventListener('keydown', e => { if((e.ctrlKey||e.metaKey)&&e.key==='z'&&activeIdx!==null){e.preventDefault();undoLast(activeIdx);} });
+
+// Mobile tab switching
+function mobileTab(tab) {
+  const sidebar = document.getElementById('sidebarPanel');
+  const mapEl = document.getElementById('mapPanel');
+  const btns = document.querySelectorAll('#mobileTabs button');
+  if (tab === 'map') {
+    mapEl.classList.remove('hidden');
+    sidebar.classList.add('hidden');
+    btns[0].classList.add('active');
+    btns[1].classList.remove('active');
+    // Leaflet needs invalidateSize after becoming visible
+    setTimeout(() => map.invalidateSize(), 50);
+  } else {
+    mapEl.classList.add('hidden');
+    sidebar.classList.remove('hidden');
+    btns[0].classList.remove('active');
+    btns[1].classList.add('active');
+  }
+}
+
+// On mobile, switch to map when a route is selected
+const origSelectRoute = selectRoute;
+// (handled inline: after selectRoute, if on mobile and activeIdx set, switch to map)
+
+updateUI();
+
+// Initial mobile state: show map
+if (window.innerWidth <= 850) {
+  document.getElementById('sidebarPanel').classList.add('hidden');
+}
+
+// Fix Leaflet not knowing its container size on initial load
+window.addEventListener('load', () => { map.invalidateSize(); });
+setTimeout(() => { map.invalidateSize(); }, 100);
+setTimeout(() => { map.invalidateSize(); }, 500);
+
+// ============ PRINT ============
+function openPrintView() {
+  const routesWithData = routes.map((r,i) => ({route:r, idx:i})).filter(x => x.route.points.length >= 2);
+  if (routesWithData.length === 0) return alert('Noch keine Routen zum Drucken.');
+
+  // Pre-render all maps to data URLs, then open print window
+  const mapImages = {};
+  let pending = routesWithData.length;
+
+  routesWithData.forEach(({route, idx}) => {
+    renderToDataURL(idx, (dataURL) => {
+      mapImages[idx] = dataURL;
+      pending--;
+      if (pending === 0) openPrintWindow(routesWithData, mapImages);
+    });
+  });
+}
+
+function openPrintWindow(routesWithData, mapImages) {
+  const win = window.open('', '_blank');
+  if (!win) { alert('Popup blockiert – bitte Popups erlauben.'); return; }
+
+  let pagesHTML = '';
+  routesWithData.forEach(({route, idx}, pageIdx) => {
+    const d = totalDist(idx);
+    const inRange = d >= TARGET_MIN && d <= TARGET_MAX;
+    const isLast = pageIdx === routesWithData.length - 1;
+
+    pagesHTML += `
+      <div class="page" ${!isLast ? 'style="page-break-after:always;"' : ''}>
+        <div class="header">
+          <div class="route-num" style="background:${COLORS[idx % COLORS.length]}">${idx+1}</div>
+          <div>
+            <div class="title">${route.name}</div>
+            <div class="dist">${(d/1000).toFixed(2)} km ${inRange?'✅':'⚠️'} ${route.closed?'· Rundkurs':''}</div>
+          </div>
+          <div class="school">${schoolName}<br>📍 ${SCHOOL[0].toFixed(5)}, ${SCHOOL[1].toFixed(5)}</div>
+        </div>
+        <div class="map-box">
+          <img src="${mapImages[idx]}">
+        </div>
+        <div class="footer">
+          <span>Kartengrundlage: swisstopo / OpenStreetMap</span>
+          <span>Route ${idx+1} von ${routesWithData.length}</span>
+        </div>
+      </div>
+    `;
+  });
+
+  win.document.write(`<!DOCTYPE html>
+<html><head>
+<meta charset="UTF-8">
+<title>Routen drucken</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: system-ui, -apple-system, sans-serif; background:#eee; }
+  @page { size: A4 portrait; margin: 8mm; }
+
+  .toolbar {
+    position:sticky; top:0; z-index:100; background:white;
+    border-bottom:2px solid #ddd; padding:12px 24px;
+    display:flex; align-items:center; gap:12px;
+  }
+  .toolbar button {
+    padding:8px 22px; border-radius:8px; font-family:inherit;
+    font-size:.85rem; font-weight:600; cursor:pointer; border:none;
+  }
+  .toolbar .bp { background:#2d6a4f; color:white; }
+  .toolbar .bc { background:#eee; color:#333; }
+  .toolbar span { font-size:.82rem; color:#888; }
+
+  .page {
+    width:210mm; min-height:295mm; margin:8mm auto;
+    padding:12mm; background:white;
+    box-shadow:0 0 10px rgba(0,0,0,.08);
+  }
+
+  .header {
+    display:flex; align-items:center; gap:14px;
+    border-bottom:2.5px solid #2d6a4f;
+    padding-bottom:10px; margin-bottom:12px;
+  }
+  .route-num {
+    width:40px;height:40px;border-radius:50%;display:flex;
+    align-items:center;justify-content:center;color:white;
+    font-weight:700;font-size:1.05rem;flex-shrink:0;
+    -webkit-print-color-adjust:exact; print-color-adjust:exact;
+  }
+  .title { font-size:1.35rem; font-weight:700; }
+  .dist { font-size:.95rem; color:#666; margin-top:2px; }
+  .school { margin-left:auto; text-align:right; font-size:.75rem; color:#888; }
+
+  .map-box {
+    width:100%; height:230mm; border:1px solid #ddd;
+    border-radius:4px; overflow:hidden; background:#f0f0f0;
+  }
+  .map-box img { display:block; width:100%; height:100%; object-fit:cover; }
+
+  .footer {
+    margin-top:8px; font-size:.68rem; color:#999;
+    display:flex; justify-content:space-between;
+  }
+
+  @media print {
+    body { background:white; }
+    .toolbar { display:none !important; }
+    .page { box-shadow:none; margin:0; width:100%; min-height:auto; }
+    .map-box { height:230mm; }
+  }
+</style>
+</head><body>
+  <div class="toolbar">
+    <button class="bp" onclick="window.print()">🖨️ Drucken</button>
+    <button class="bc" onclick="window.close()">✕ Schliessen</button>
+    <span>${routesWithData.length} Route(n) · je 1 A4-Seite</span>
+  </div>
+  ${pagesHTML}
+</body></html>`);
+
+  win.document.close();
+}
+
+function closePrintView() {} // kept for compat
+
+function renderToDataURL(idx, callback) {
+  // A4 print area: ~186mm wide x 220mm tall (after header/footer)
+  // Use 2x resolution for sharp print
+  const W = 1860;
+  const H = 2200;
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d');
+
+  const route = routes[idx];
+  const pts = route.points;
+
+  // Tile math (defined first so zoom calc can use them)
+  function lng2x(lng, z) { return ((lng+180)/360)*Math.pow(2,z); }
+  function lat2y(lat, z) { const r=lat*Math.PI/180; return (1-Math.log(Math.tan(r)+1/Math.cos(r))/Math.PI)/2*Math.pow(2,z); }
+
+  // Calculate bounds with padding
+  let minLat=90, maxLat=-90, minLng=180, maxLng=-180;
+  pts.forEach(p => { minLat=Math.min(minLat,p[0]); maxLat=Math.max(maxLat,p[0]); minLng=Math.min(minLng,p[1]); maxLng=Math.max(maxLng,p[1]); });
+  // Also include school
+  minLat=Math.min(minLat,SCHOOL[0]); maxLat=Math.max(maxLat,SCHOOL[0]);
+  minLng=Math.min(minLng,SCHOOL[1]); maxLng=Math.max(maxLng,SCHOOL[1]);
+
+  const padFactor = 0.1;
+  const dLat = (maxLat-minLat) || 0.005;
+  const dLng = (maxLng-minLng) || 0.005;
+  minLat -= dLat*padFactor; maxLat += dLat*padFactor;
+  minLng -= dLng*padFactor; maxLng += dLng*padFactor;
+
+  // Determine best integer zoom that fits bounds into canvas
+  let zoom = 16;
+  for (let z = 18; z >= 10; z--) {
+    const x1 = lng2x(minLng, z) * 256;
+    const x2 = lng2x(maxLng, z) * 256;
+    const y1 = lat2y(maxLat, z) * 256;
+    const y2 = lat2y(minLat, z) * 256;
+    if ((x2 - x1) <= W && (y2 - y1) <= H) { zoom = z; break; }
+  }
+
+  // Center in Mercator space
+  const centerLng = (minLng + maxLng) / 2;
+  const yTop = Math.log(Math.tan(Math.PI/4 + maxLat*Math.PI/360));
+  const yBot = Math.log(Math.tan(Math.PI/4 + minLat*Math.PI/360));
+  const centerLat = (Math.atan(Math.exp((yTop+yBot)/2)) - Math.PI/4) * 360 / Math.PI;
+
+  function toPixel(lat, lng) {
+    const cx = lng2x(centerLng, zoom) * 256;
+    const cy = lat2y(centerLat, zoom) * 256;
+    return {
+      x: lng2x(lng, zoom)*256 - cx + W/2,
+      y: lat2y(lat, zoom)*256 - cy + H/2
+    };
+  }
+
+  // Load tiles
+  const cx = lng2x(centerLng, zoom);
+  const cy = lat2y(centerLat, zoom);
+  const halfW = W/2/256;
+  const halfH = H/2/256;
+  const xMin = Math.floor(cx-halfW)-1;
+  const xMax = Math.ceil(cx+halfW)+1;
+  const yMin = Math.floor(cy-halfH)-1;
+  const yMax = Math.ceil(cy+halfH)+1;
+  const n = Math.pow(2, zoom);
+
+  let tilesToLoad = [];
+  for (let x=xMin; x<=xMax; x++) {
+    for (let y=yMin; y<=yMax; y++) {
+      if (y<0||y>=n) continue;
+      const tileX = ((x%n)+n)%n;
+      // Tile top-left corner in pixel space:
+      // tile x starts at x*256 in world pixels, center is at cx*256 in world pixels
+      // screen position = (x*256 - cx*256) + W/2
+      const px = (x - cx) * 256 + W/2;
+      const py = (y - cy) * 256 + H/2;
+      tilesToLoad.push({tileX, y, px, py});
+    }
+  }
+
+  let loaded = 0;
+  const total = tilesToLoad.length;
+
+  // Draw grey background first
+  ctx.fillStyle = '#e8e6e0';
+  ctx.fillRect(0, 0, W, H);
+
+  function drawOverlays() {
+    // Draw route
+    ctx.strokeStyle = COLORS[idx % COLORS.length];
+    ctx.lineWidth = 8;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    pts.forEach((p, i) => {
+      const {x, y} = toPixel(p[0], p[1]);
+      if (i===0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    if (route.closed && pts.length>=2) {
+      const {x, y} = toPixel(pts[0][0], pts[0][1]);
+      ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+
+    // Draw waypoint dots
+    pts.forEach((p, i) => {
+      const {x, y} = toPixel(p[0], p[1]);
+      ctx.beginPath();
+      ctx.arc(x, y, 7, 0, Math.PI*2);
+      ctx.fillStyle = COLORS[idx % COLORS.length];
+      ctx.fill();
+      ctx.strokeStyle = 'white';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+    });
+
+    // Draw school marker
+    const sp = toPixel(SCHOOL[0], SCHOOL[1]);
+    ctx.beginPath();
+    ctx.arc(sp.x, sp.y, 16, 0, Math.PI*2);
+    ctx.fillStyle = '#1e293b';
+    ctx.fill();
+    ctx.strokeStyle = 'white';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.fillStyle = 'white';
+    ctx.font = '18px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('🏫', sp.x, sp.y);
+
+    // Scale bar
+    drawScaleBar(ctx, W, H, centerLat, zoom);
+
+    // Return as data URL
+    callback(canvas.toDataURL('image/png'));
+  }
+
+  if (total === 0) { drawOverlays(); return; }
+
+  // Timeout: if tiles take too long, render anyway after 8 seconds
+  const timeout = setTimeout(() => { if (loaded < total) drawOverlays(); }, 8000);
+
+  tilesToLoad.forEach(t => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    // Try swisstopo first, fallback to OSM
+    img.src = `https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.pixelkarte-farbe/default/current/3857/${zoom}/${t.tileX}/${t.y}.jpeg`;
+    img.onload = function() {
+      ctx.drawImage(img, t.px, t.py, 256, 256);
+      loaded++;
+      if (loaded >= total) { clearTimeout(timeout); drawOverlays(); }
+    };
+    img.onerror = function() {
+      // Fallback to OSM
+      const img2 = new Image();
+      img2.crossOrigin = 'anonymous';
+      img2.src = `https://tile.openstreetmap.org/${zoom}/${t.tileX}/${t.y}.png`;
+      img2.onload = function() {
+        ctx.drawImage(img2, t.px, t.py, 256, 256);
+        loaded++;
+        if (loaded >= total) { clearTimeout(timeout); drawOverlays(); }
+      };
+      img2.onerror = function() {
+        loaded++;
+        if (loaded >= total) { clearTimeout(timeout); drawOverlays(); }
+      };
+    };
+  });
+}
+
+function drawScaleBar(ctx, W, H, lat, zoom) {
+  // Meters per pixel at this zoom/lat
+  const mpp = 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, zoom);
+  // Pick a nice round distance
+  const targets = [50, 100, 200, 500, 1000, 2000];
+  let dist = 100;
+  for (const t of targets) {
+    if (t / mpp > 40 && t / mpp < 200) { dist = t; break; }
+  }
+  const barW = dist / mpp;
+  const x = 20;
+  const y = H - 20;
+
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  ctx.fillRect(x-6, y-18, barW+32, 26);
+  ctx.strokeStyle = '#333';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(x, y); ctx.lineTo(x+barW, y);
+  ctx.moveTo(x, y-6); ctx.lineTo(x, y);
+  ctx.moveTo(x+barW, y-6); ctx.lineTo(x+barW, y);
+  ctx.stroke();
+  ctx.fillStyle = '#333';
+  ctx.font = '11px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  ctx.fillText(dist >= 1000 ? (dist/1000)+'km' : dist+'m', x + barW/2, y - 7);
+}
+</script>
+
+<div id="printOverlay" class="print-overlay"></div>
+</body>
+</html>
