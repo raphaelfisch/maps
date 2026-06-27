@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Geo-Werkzeugkasten — Ideen für die letzten Tage</title>
+<style>
+  :root{
+    --paper:#eef0e7;
+    --paper-2:#e4e7da;
+    --ink:#1b322e;
+    --ink-soft:#3d5a52;
+    --line:#c2c9b6;
+    --amber:#c9772f;
+    --card:#f7f8f2;
+
+    /* Kategorie-Farben */
+    --c-erkunden:#2f7d7a;
+    --c-raten:#c9772f;
+    --c-karten:#3a5fa0;
+    --c-bauen:#6a8a3a;
+    --c-klima:#9a4d8f;
+    --c-erstellen:#b0463a;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  /* Höhenlinien-Signatur */
+  .topo{
+    position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.5;
+    background:
+      radial-gradient(120% 90% at 80% -10%, transparent 0, transparent 38%, var(--line) 38.2%, transparent 38.6%, transparent 44%, var(--line) 44.2%, transparent 44.6%, transparent 51%, var(--line) 51.2%, transparent 51.6%, transparent 59%, var(--line) 59.2%, transparent 59.6%, transparent 68%, var(--line) 68.2%, transparent 68.6%),
+      radial-gradient(100% 80% at 12% 110%, transparent 0, transparent 40%, var(--line) 40.2%, transparent 40.6%, transparent 48%, var(--line) 48.2%, transparent 48.6%, transparent 57%, var(--line) 57.2%, transparent 57.6%, transparent 67%, var(--line) 67.2%, transparent 67.6%);
+  }
+  .wrap{position:relative;z-index:1;max-width:1120px;margin:0 auto;padding:0 20px 80px;}
+
+  header{padding:48px 0 28px;}
+  .eyebrow{
+    font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    font-size:12px;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--ink-soft);margin:0 0 12px;
+  }
+  h1{font-size:clamp(30px,5vw,46px);line-height:1.05;margin:0 0 12px;letter-spacing:-.01em;font-weight:800;}
+  .sub{max-width:60ch;color:var(--ink-soft);font-size:16px;margin:0;}
+
+  /* Steuerung */
+  .controls{
+    position:sticky;top:0;z-index:5;
+    margin:26px 0 8px;padding:14px 0;
+    background:linear-gradient(var(--paper) 78%, transparent);
+  }
+  .search{
+    width:100%;border:1.5px solid var(--line);border-radius:12px;
+    background:var(--card);padding:12px 14px;font-size:15px;color:var(--ink);
+    font-family:inherit;outline:none;
+  }
+  .search:focus{border-color:var(--ink);}
+  .filters{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;align-items:center;}
+  .chip{
+    border:1.5px solid var(--line);background:var(--card);color:var(--ink-soft);
+    font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;
+    letter-spacing:.02em;padding:7px 13px;border-radius:999px;cursor:pointer;
+    transition:all .15s ease;
+  }
+  .chip:hover{border-color:var(--ink-soft);color:var(--ink);}
+  .chip[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink);}
+  .chip .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:7px;vertical-align:middle;}
+
+  .toggle{margin-left:auto;display:flex;align-items:center;gap:9px;font-size:13.5px;color:var(--ink-soft);cursor:pointer;user-select:none;}
+  .toggle input{appearance:none;width:40px;height:22px;border-radius:999px;background:var(--line);position:relative;cursor:pointer;transition:.18s;flex:none;}
+  .toggle input::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;transition:.18s;}
+  .toggle input:checked{background:var(--c-bauen);}
+  .toggle input:checked::after{transform:translateX(18px);}
+
+  .count{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:var(--ink-soft);margin:6px 0 18px;}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;}
+  .card{
+    position:relative;background:var(--card);border:1.5px solid var(--line);
+    border-radius:16px;padding:18px 18px 16px;display:flex;flex-direction:column;
+    min-height:172px;transition:transform .14s ease,box-shadow .14s ease,border-color .14s;
+    border-left-width:5px;text-decoration:none;color:inherit;
+  }
+  a.card:hover{transform:translateY(-3px);box-shadow:0 10px 26px rgba(27,50,46,.13);}
+  .card.nolink{cursor:default;}
+  .card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;}
+  .cat{
+    font-family:ui-monospace,Menlo,monospace;font-size:10.5px;letter-spacing:.12em;
+    text-transform:uppercase;font-weight:600;
+  }
+  .badges{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;}
+  .badge{
+    font-family:ui-monospace,Menlo,monospace;font-size:10px;letter-spacing:.05em;
+    padding:3px 8px;border-radius:6px;border:1px solid var(--line);color:var(--ink-soft);white-space:nowrap;
+  }
+  .badge.login{border-color:#d8a24a;background:#fbf3e2;color:#8a5a18;}
+  .badge.ar{border-color:#7fa6a4;background:#e7f1f0;color:#2f6361;}
+  .badge.draussen{border-color:#9bbf6e;background:#eef4e3;color:#4f6b27;}
+  .name{font-size:19px;font-weight:700;margin:12px 0 6px;letter-spacing:-.01em;line-height:1.15;}
+  .desc{font-size:13.5px;color:var(--ink-soft);margin:0;flex:1;}
+  .url{
+    font-family:ui-monospace,Menlo,monospace;font-size:11.5px;color:var(--ink-soft);
+    margin-top:13px;word-break:break-all;display:flex;align-items:center;gap:6px;
+  }
+  .url .arrow{color:var(--amber);font-weight:700;}
+  .nolink .url{color:#9aa48f;font-style:italic;}
+
+  .empty{text-align:center;padding:60px 0;color:var(--ink-soft);font-family:ui-monospace,monospace;font-size:14px;}
+  footer{margin-top:46px;padding-top:20px;border-top:1.5px solid var(--line);font-size:12.5px;color:var(--ink-soft);font-family:ui-monospace,Menlo,monospace;}
+
+  @media (max-width:560px){
+    .toggle{margin-left:0;width:100%;}
+    .filters{gap:7px;}
+  }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;}}
+</style>
+</head>
+<body>
+<div class="topo" aria-hidden="true"></div>
+<div class="wrap">
+  <header>
+    <h1>Geo-Werkzeugkasten</h1>
+    <p class="sub">Eine Sammlung von Online-Werkzeugen und Ideen für geographische Stunden. Nach Thema filterbar — und auf Wunsch nur das, was ohne Login läuft.</p>
+  </header>
+
+  <div class="controls">
+    <input type="text" class="search" id="search" placeholder="Suchen … (z. B. Karte, Klima, raten)" aria-label="Werkzeuge durchsuchen">
+    <div class="filters" id="filters"></div>
+  </div>
+
+  <p class="count" id="count"></p>
+  <div class="grid" id="grid"></div>
+  <p class="empty" id="empty" style="display:none">Keine Treffer. Filter zurücksetzen oder Suche anpassen.</p>
+
+  <footer>
+    Quelle der Ideen: geo.unterricht · Stand Juni 2026
+  </footer>
+</div>
+
+<script>
+const CATS = {
+  erkunden:  {label:"Erkunden",        color:"var(--c-erkunden)"},
+  raten:     {label:"Orte erraten",    color:"var(--c-raten)"},
+  karten:    {label:"Karten & Topo",   color:"var(--c-karten)"},
+  bauen:     {label:"Bauen & Gestalten",color:"var(--c-bauen)"},
+  klima:     {label:"Klima & Wetter",  color:"var(--c-klima)"},
+  erstellen: {label:"SuS erstellen",   color:"var(--c-erstellen)"}
+};
+
+const TOOLS = [
+  {name:"Tagebau 360°", cat:"erkunden", url:"https://tagebau.wdr.de/", login:false,
+   desc:"Einen Braunkohletagebau virtuell erkunden — mit eingebetteten Videos, Interviews und Bildmaterial."},
+  {name:"Virtual Window", cat:"erkunden", url:"https://virtualvacation.us/window", login:false,
+   desc:"Öffnet per Zufall irgendwo auf der Welt ein Fenster — Umgebung beobachten."},
+  {name:"Google Voyager", cat:"erkunden", url:"https://www.google.com/earth/about/gallery", login:false,
+   desc:"Virtuelle Exkursionen zu vielen Themen direkt in Google Earth, ohne Anmeldung."},
+  {name:"Radio Garden", cat:"erkunden", url:"https://radio.garden", login:false,
+   desc:"Auf einem interaktiven Globus weltweit Radiostationen erkunden und live hören. Mit Höraufträgen kombinierbar."},
+  {name:"Merge Cube", cat:"erkunden", url:"https://mergeedu.com/merge-cube", login:true, ar:true,
+   desc:"Ein „QR-Würfel“ in 3D, per AR dargestellt. Würfel kaufen oder aus Papier basteln. Account nötig."},
+  {name:"Skybox AI", cat:"erkunden", url:"https://skybox.blockadelabs.com", login:true,
+   desc:"Per Textprompt eigene 3D-Landschaften generieren und in 360° erkunden. Anmeldung nötig — Datenschutz beachten."},
+
+  {name:"GeoGuessr", cat:"raten", url:"https://www.geoguessr.com/de", login:true,
+   desc:"Der Klassiker. Eine Runde mit der Klasse, optional begrenzt auf das Schulumfeld. Account teilweise nötig."},
+  {name:"Citi Guesser", cat:"raten", url:"https://virtualvacation.us/guess", login:false,
+   desc:"Wie GeoGuessr, aber ohne separate Anmeldung. Per Video durch eine Zufallsstadt wandern und den Ort begründet lokalisieren."},
+  {name:"Worldle", cat:"raten", url:"https://worldle.teuteuf.fr", login:false,
+   desc:"Länder anhand ihrer Umrisse erkennen und erraten."},
+  {name:"River Runner Global", cat:"raten", url:"https://river-runner-global.samlearner.com", login:false,
+   desc:"Punkt auf der Weltkarte wählen, als Regentropfen fallen und verfolgen, über welche Flusssysteme man im Meer landet."},
+
+  {name:"Mappuzzle", cat:"karten", url:"https://mappuzzle.xyz", login:false,
+   desc:"Interaktives Puzzle für topographische Übungen — von einfach bis kompliziert."},
+  {name:"Mapchart.net", cat:"karten", url:"https://www.mapchart.net", login:false,
+   desc:"Eigene Karten erstellen, ohne Anmeldung. Viele Einstellungen und Vorlagenkarten, intuitiv nutzbar."},
+  {name:"Das ABC aus dem All", cat:"karten", url:"https://www.google.com/intl/de_in/earth/education/explore-earth/", login:false,
+   desc:"Ein Alphabet in den Landschaften der Erde? NASA-Satellitenaufnahmen und Astronautenbilder zeigen, wo."},
+  {name:"Mental Maps", cat:"karten", url:null, login:false,
+   desc:"SuS zeichnen eigene Mental Maps ohne Vorlage und Atlas — danach Vergleich mit Atlaskarten. Bewusstmachung räumlicher Vorstellungen. (Analog, kein Tool)"},
+
+  {name:"Icograms Designer", cat:"bauen", url:"https://icograms.com/designer", login:false,
+   desc:"Browserbasiert eigene Städte bauen — mit oder ohne Themenvorgabe (z. B. klimafreundlich, nachhaltig) und präsentieren."},
+  {name:"StadtklimaArchitekt", cat:"bauen", url:"https://projekte.cen.uni-hamburg.de/stadtklimaarchitekt", login:false,
+   desc:"Simulationsspiel: eine klimafreundliche Stadt bauen. Drag-and-Drop, ohne Anmeldung im Browser spielbar."},
+
+  {name:"Die Klima App", cat:"klima", url:"https://www.planet-schule.de/thema/klima-app-102.html", login:false, ar:true,
+   desc:"Per Augmented Reality die Auswirkungen des Klimawandels im Unterricht erfahrbar machen."},
+  {name:"Ventusky", cat:"klima", url:"https://www.ventusky.com", login:false,
+   desc:"Interaktive Wetterkarte in Echtzeit. Viele Klimaelemente in Ebenen, rückwirkend und zukünftig darstellbar."},
+
+  {name:"LearningApps.org", cat:"erstellen", url:"https://learningapps.org/", login:true,
+   desc:"Viele Quiz zu allen Themen — besonders stark, wenn SuS eigene Quiz zum Unterrichtsstoff erstellen. (Erstellen braucht Account.)"},
+  {name:"Stadt-Land-Fluss Online", cat:"erstellen", url:"https://stadtlandfluss.cool", login:false,
+   desc:"Der Klassiker als Multiplayer-Online-Spiel mit eigenen Kategorien."},
+  {name:"KI-Collagen", cat:"erstellen", url:null, login:true,
+   desc:"SuS schreiben einen komplexen Prompt, der die Schuljahres-Inhalte zusammenfasst, und erzeugen daraus eine Collage. Andere rekonstruieren per „Rückwärts-Prompten“. KI-Tool der Wahl — Datenschutz beachten."},
+
+  {name:"Geocaching", cat:"erkunden", url:"https://www.geocaching.com", login:true, draussen:true,
+   desc:"Mit der Klasse Geocaches in Schulnähe suchen. Fördert räumliche Orientierung, Kartenkompetenz und Bewegung an der frischen Luft."}
+];
+
+const grid = document.getElementById("grid");
+const countEl = document.getElementById("count");
+const emptyEl = document.getElementById("empty");
+const searchEl = document.getElementById("search");
+const filterBar = document.getElementById("filters");
+
+let activeCats = new Set();
+let hideLogin = false;
+let query = "";
+
+// Filter-Chips bauen
+Object.entries(CATS).forEach(([key,c])=>{
+  const b=document.createElement("button");
+  b.className="chip";b.setAttribute("aria-pressed","false");b.dataset.cat=key;
+  b.innerHTML=`<span class="dot" style="background:${c.color}"></span>${c.label}`;
+  b.onclick=()=>{
+    if(activeCats.has(key)){activeCats.delete(key);b.setAttribute("aria-pressed","false");}
+    else{activeCats.add(key);b.setAttribute("aria-pressed","true");}
+    render();
+  };
+  filterBar.appendChild(b);
+});
+// Login-Toggle
+const tog=document.createElement("label");
+tog.className="toggle";
+tog.innerHTML=`<input type="checkbox" id="nologin"><span>nur ohne Login</span>`;
+filterBar.appendChild(tog);
+tog.querySelector("input").onchange=(e)=>{hideLogin=e.target.checked;render();};
+
+searchEl.oninput=(e)=>{query=e.target.value.trim().toLowerCase();render();};
+
+function card(t){
+  const c=CATS[t.cat];
+  const el=document.createElement(t.url?"a":"div");
+  el.className="card"+(t.url?"":" nolink");
+  el.style.borderLeftColor=c.color;
+  if(t.url){el.href=t.url;el.target="_blank";el.rel="noopener";}
+  const badges=[];
+  if(t.login)badges.push(`<span class="badge login">Login</span>`);
+  if(t.ar)badges.push(`<span class="badge ar">AR</span>`);
+  if(t.draussen)badges.push(`<span class="badge draussen">Draussen</span>`);
+  el.innerHTML=`
+    <div class="card-top">
+      <span class="cat" style="color:${c.color}">${c.label}</span>
+      <span class="badges">${badges.join("")}</span>
+    </div>
+    <div class="name">${t.name}</div>
+    <p class="desc">${t.desc}</p>
+    <div class="url">${t.url?`<span class="arrow">&rarr;</span>${t.url.replace(/^https?:\/\//,"")}`:"kein Link — Idee / analog"}</div>`;
+  return el;
+}
+
+function render(){
+  const list=TOOLS.filter(t=>{
+    if(activeCats.size && !activeCats.has(t.cat))return false;
+    if(hideLogin && t.login)return false;
+    if(query){
+      const hay=(t.name+" "+t.desc+" "+CATS[t.cat].label).toLowerCase();
+      if(!hay.includes(query))return false;
+    }
+    return true;
+  });
+  grid.innerHTML="";
+  list.forEach(t=>grid.appendChild(card(t)));
+  countEl.textContent=`${list.length} von ${TOOLS.length} Werkzeugen`;
+  emptyEl.style.display=list.length?"none":"block";
+}
+render();
+</script>
+</body>
+</html>
